@@ -1,7 +1,6 @@
 import socket
 
 class Transmitter:
-    HOST_PORT = 0
     PORT = 7500
 
     def __init__(self, ip = "127.0.0.255"):
@@ -40,7 +39,7 @@ class Receiver:
 
     def recv(self):
         bytes, addr  = self.sock.recvfrom(Receiver.BUFFER_SIZE)
-        # Format is a single integer; ASCII is sufficient
+        # Format is of integers and ':'; ASCII is sufficient
         message = bytes.rstrip(b'\x00').decode("ascii", errors = "replace")
         print(f"Received from {addr}: {message}")
 
