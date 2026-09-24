@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:13.14
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: student
+      POSTGRES_DB: photon
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+       - "127.0.0.1:5432:5432"
+    volumes:
+      - ./init-db:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
