@@ -3,7 +3,7 @@ import socket
 class Transmitter:
     PORT = 7500
 
-    def __init__(self, ip = "127.0.0.255"):
+    def __init__(self, ip = "127.0.0.1"):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ip = ip
 
