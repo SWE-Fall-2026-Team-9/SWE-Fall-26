@@ -211,8 +211,7 @@ def change_network_destination():
 
 	try:
 		transmitter.send(f'-999:{ipaddress.IPv4Address(newIP)}')
-		# Each set of equipment must respond with 'ACK:<equipmentID>
-
+		# Each set of equipment must respond with '-998:<equipmentID>
 
 		transmitter.ip = newIP
 
