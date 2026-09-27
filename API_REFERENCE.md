@@ -1,85 +1,47 @@
 # Client–Server API Reference
 
-This document describes the HTTP interface exposed by the Flask server for the frontend client.
-
 ## Base URL
-
-For local development:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-When the frontend is served by the same Flask application, relative URLs such as `/getPlayer` should be used.
+Use relative URLs when the frontend is served by the Flask application.
 
 ## Conventions
 
-- Request and response bodies use JSON unless an endpoint explicitly uses query parameters.
-- JSON requests must include the `Content-Type: application/json` header.
-- The frontend must inspect the response's `success` property to determine whether an operation succeeded. Application-level errors currently may still use HTTP status `200`.
-- Player IDs are integers.
-- Codenames are strings. Leading and trailing whitespace is removed by the server when a player is set.
+- JSON requests require `Content-Type: application/json`.
+- Request bodies are limited to 64 KiB.
+- Every API response contains a boolean `success` field.
+- The frontend must inspect `success`; application errors may still use HTTP status `200`.
+- Player and equipment IDs must be positive integers no greater than `2147483647`. Booleans and fractional values are rejected.
+- Codenames are trimmed, cannot be blank, and must contain no more than 255 characters.
+- Database players are persistent PostgreSQL records containing an ID and codename.
+- Game players are temporary roster entries containing a database player, equipment assignment, team, and score.
+- Creating a database player preserves the player ID entered by the administrator.
 
 ## Endpoint summary
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/getPlayer` | Retrieve one player by ID |
-| `GET` | `/getAllPlayers` | Retrieve every player |
-| `POST` | `/setPlayer` | Create a player or update an existing player |
-| `POST` | `/deletePlayer` | Delete a player by ID |
+| `GET` | `/api/database/players` | List persistent players |
+| `POST` | `/api/database/players/create` | Create a persistent player |
+| `GET` | `/api/database/players/{playerID}` | Get one persistent player |
+| `POST` | `/api/database/players/{playerID}/update` | Update a persistent player's codename |
+| `POST` | `/api/database/players/{playerID}/delete` | Permanently delete a player |
+| `GET` | `/api/game/players` | List the current game roster |
+| `POST` | `/api/game/players/add` | Add a persistent player to the game |
+| `POST` | `/api/game/players/{playerID}/remove` | Remove one player from the game |
+| `POST` | `/api/game/players/clear` | Clear the current game roster |
+| `POST` | `/api/network/destination/change` | Change the UDP destination address |
 
-## Get one player
+## Database players
 
-```http
-GET /getPlayer?playerID=1
-```
-
-### Query parameters
-
-| Name | Type | Required | Description |
-| --- | --- | --- | --- |
-| `playerID` | integer | Yes | ID of the player to retrieve |
-
-### Successful response
-
-```json
-{
-  "success": true,
-  "data": {
-    "playerID": 1,
-    "codename": "Alpha"
-  }
-}
-```
-
-### Player not found
-
-```json
-{
-  "success": false,
-  "error": {
-    "playerID": 999
-  }
-}
-```
-
-### Invalid or missing ID
-
-```json
-{
-  "success": false,
-  "error": "Invalid playerID"
-}
-```
-
-## Get all players
+### List database players
 
 ```http
-GET /getAllPlayers
+GET /api/database/players
 ```
-
-### Successful response
 
 ```json
 {
@@ -88,53 +50,18 @@ GET /getAllPlayers
     {
       "playerID": 1,
       "codename": "Alpha"
-    },
-    {
-      "playerID": 2,
-      "codename": "Bravo"
     }
   ]
 }
 ```
 
-If there are no players, `data` is an empty array:
-
-```json
-{
-  "success": true,
-  "data": []
-}
-```
-
-## Create or update a player
+### Get a database player
 
 ```http
-POST /setPlayer
-Content-Type: application/json
+GET /api/database/players/1
 ```
 
-### Request body
-
-```json
-{
-  "playerID": -1,
-  "codename": "Alpha"
-}
-```
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `playerID` | integer | Yes | Existing ID to update. Use `-1` when creating a new player. |
-| `codename` | string | Yes | Nonblank player codename |
-
-### Behavior
-
-- If `playerID` matches an existing player, that player's codename is updated.
-- If `playerID` does not match an existing player, a new player is created.
-- The server assigns the new player's ID. It starts at `1` for an empty database; otherwise it uses the current highest ID plus one.
-- The client should use the `playerID` returned by the server rather than assuming the submitted ID was used.
-
-### Successful response
+Successful response:
 
 ```json
 {
@@ -146,46 +73,71 @@ Content-Type: application/json
 }
 ```
 
-### Validation errors
-
-Invalid or missing player ID:
+Not found:
 
 ```json
 {
   "success": false,
-  "error": "Invalid playerID"
+  "error": "Player with ID 1 not found."
 }
 ```
 
-Missing or blank codename:
-
-```json
-{
-  "success": false,
-  "error": "Codename is required"
-}
-```
-
-## Delete a player
+### Create a database player
 
 ```http
-POST /deletePlayer
+POST /api/database/players/create
 Content-Type: application/json
 ```
 
-### Request body
-
 ```json
 {
-  "playerID": 1
+  "playerID": 7,
+  "codename": "Alpha"
 }
 ```
 
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `playerID` | integer | Yes | ID of the player to delete |
+The server rejects the request if the player ID is invalid or already exists.
 
-### Successful response
+```json
+{
+  "success": true,
+  "data": {
+    "playerID": 7,
+    "codename": "Alpha"
+  }
+}
+```
+
+### Update a database player
+
+```http
+POST /api/database/players/1/update
+Content-Type: application/json
+```
+
+```json
+{
+  "codename": "Bravo"
+}
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "playerID": 1,
+    "codename": "Bravo"
+  }
+}
+```
+
+If the player is currently in the game, their roster codename is updated too.
+
+### Delete a database player
+
+```http
+POST /api/database/players/1/delete
+```
 
 ```json
 {
@@ -194,75 +146,138 @@ Content-Type: application/json
 }
 ```
 
-### Player not found
+Deleting a database player also removes that player from the current game.
+
+## Game players
+
+### List game players
+
+```http
+GET /api/game/players
+```
 
 ```json
 {
-  "success": false,
-  "error": "Player with ID 999 not found."
+  "success": true,
+  "data": [
+    {
+      "playerID": 1,
+      "codename": "Alpha",
+      "equipmentID": 8,
+      "team": "red",
+      "score": 0
+    }
+  ]
 }
 ```
 
-### Invalid or missing ID
+### Add a player to the game
+
+The player must already exist in the database.
+
+```http
+POST /api/game/players/add
+Content-Type: application/json
+```
 
 ```json
 {
-  "success": false,
-  "error": "Invalid playerID"
+  "playerID": 1,
+  "equipmentID": 8,
+  "team": "red"
 }
 ```
 
-## Frontend example
+| Field | Type | Description |
+| --- | --- | --- |
+| `playerID` | positive integer | Persistent database player ID |
+| `equipmentID` | positive integer | Equipment assigned for this game |
+| `team` | string | `red` or `green` |
 
-The following helper sends a JSON request and returns the parsed response:
+The server rejects duplicate players, duplicate equipment assignments, and teams containing more than 15 players. After validation, it broadcasts the equipment ID through UDP port `7500`.
 
-```javascript
-async function sendJson(path, body) {
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
+Successful response:
 
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(
-      typeof result.error === 'string'
-        ? result.error
-        : JSON.stringify(result.error)
-    );
+```json
+{
+  "success": true,
+  "data": {
+    "playerID": 1,
+    "codename": "Alpha",
+    "equipmentID": 8,
+    "team": "red",
+    "score": 0
   }
-
-  return result;
 }
-
-const savedPlayer = await sendJson('/setPlayer', {
-  playerID: -1,
-  codename: 'Alpha'
-});
-
-await sendJson('/deletePlayer', {
-  playerID: savedPlayer.data.playerID
-});
 ```
 
-Retrieving players:
+### Remove one game player
+
+```http
+POST /api/game/players/1/remove
+```
+
+This removes the player's equipment assignment and score but preserves the database record.
+
+### Clear the game roster
+
+```http
+POST /api/game/players/clear
+```
+
+This clears all current-game players, equipment assignments, and scores. Database players are preserved.
+
+## Change the network destination
+
+```http
+POST /api/network/destination/change
+Content-Type: application/json
+```
+
+```json
+{
+  "ip": "192.168.1.255"
+}
+```
+
+The value must be a valid IPv4 address. The server normalizes the address before changing the transmitter destination.
+
+## Frontend workflow
+
+Look up the operator-entered player ID:
 
 ```javascript
-const response = await fetch('/getAllPlayers');
-const result = await response.json();
+const lookup = await fetch('/api/database/players/7');
+const lookupResult = await lookup.json();
+```
 
-if (result.success) {
-  console.log(result.data);
-}
+If the player is not found, prompt for a codename and create a persistent record:
+
+```javascript
+const createResponse = await fetch('/api/database/players/create', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({playerID: 7, codename: 'Alpha'})
+});
+
+const createdPlayer = await createResponse.json();
+```
+
+Use the confirmed ID returned by the server when adding the player to the game:
+
+```javascript
+await fetch('/api/game/players/add', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    playerID: createdPlayer.data.playerID,
+    equipmentID: 8,
+    team: 'red'
+  })
+});
 ```
 
 ## Page routes
-
-These routes return HTML pages rather than API responses:
 
 | Method | Path | Page |
 | --- | --- | --- |
