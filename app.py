@@ -1,8 +1,6 @@
 from flask import Flask, render_template, request
 from modules import db, udp
-import ipaddress
 import threading
-import time
 
 port = 8000
 DEFAULT_DEST_ADDR = '127.0.0.1'
@@ -209,15 +207,7 @@ def change_network_destination():
 
 	newIP = newIP.strip()
 
-	try:
-		transmitter.send(f'-999:{ipaddress.IPv4Address(newIP)}')
-		# Each set of equipment must respond with '-998:<equipmentID>
-
-		transmitter.ip = newIP
-
-		return {'success': True, 'message': f'Network changed to {newIP}.'}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}  # Something went wrong
+	transmitter.ip = newIP
 
 if __name__ == '__main__':
 	receiver_thread = threading.Thread(
