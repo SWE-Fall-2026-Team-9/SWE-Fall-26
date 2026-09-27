@@ -1,0 +1,181 @@
+<html>
+<head>
+  <title>Entry Terminal</title>
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+    }
+
+    #splash {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+    }
+
+    #splash img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    h1 {
+      color: #7a7aff;
+    }
+
+    .teams {
+      display: flex;
+      justify-content: center;
+    }
+
+    table {
+      padding: 8px;
+    }
+
+    .red {
+      background-color: #3a0606;
+    }
+
+    .green {
+      background-color: #063a06;
+    }
+
+    input {
+      background-color: #dcdcdc;
+    }
+
+    input:focus {
+      background-color: white;
+    }
+
+    #message {
+      color: gold;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="splash">
+    <img src="\static\logo.jpg" alt="Splash screen">
+  </div>
+
+  <h1>Edit Current Game</h1>
+
+  <div class="teams">
+    <table class="red">
+      <tr><th colspan="3">RED TEAM</th></tr>
+      <tr><td></td><td>Player ID</td><td>Codename</td></tr>
+      {% for i in range(20) %}
+      <tr>
+        <td>{{ i }}</td>
+        <td><input type = "text" id="red-id-{{ i }}" onchange="lookUpPlayer('red', { i })"></td>
+        <td><input type = "text" id="red-name-{{ i }}" onchange="saveNewPlayer('red', { i })"></td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <table class="green">
+      <tr><th colspan="3">GREEN TEAM</th></tr>
+      <tr><td></td><td>Player ID</td><td>Codename</td></tr>
+      {% for i in range(20) %}
+      <tr>
+        <td>{{ i }}</td>
+        <td><input type = "text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', { i })"></td>
+        <td><input type = "text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', { i })"></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <p id="message"></p>
+  <p>&lt;Tab&gt; next box | &lt;F3&gt; start game | &lt;F12&gt; clear all entries</p>
+
+  //Splash script
+  <script>
+    setTimeout(function () {
+      document.getElementById("splash").style.display = "none";
+      document.getElementById("red-id-0").focus();
+    }, 3000);
+
+    function showMessage(text) {
+      document.getElementById("message").textContent = text;
+    }
+
+    async function lookUpPlayer(team, row) {
+      const idBox = document.getElementById(team + "-id-" + row);
+      const nameBox = document.getElementById(team + "-name-" + row);
+
+      if (idBox.value === "") {
+        nameBox.value = "";
+        return;
+      }
+
+      const response = await fetch("/getPlayer?playerID=" + idBox.value);
+      const result = await response.json();
+
+      if (result.success) {
+        nameBox.value = result.data.codename;
+        showMessage("Found player " + result.data.playerID + ": " + result.data.codename);
+      } else if (typeof result.error === "string") {
+        showMessage("Error: " + result.error);
+      } else {
+        nameBox.value = "";
+        showMessage("Player " + idBox.value + " not found. Type a codename to add them.");
+      }
+    }
+
+    async function saveNewPlayer(team, row) {
+      const idBox = document.getElementById(team + "-id-" + row);
+      const nameBox = document.getElementById(team + "-name-" + row);
+
+      if (nameBox.value === "") {
+        return;
+      }
+
+      let playerID = -1;  
+      if (idBox.value !== "") {
+        playerID = Number(idBox.value);
+      }
+
+      const response = await fetch("/setPlayer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerID: playerID, codename: nameBox.value })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        idBox.value = result.data.playerID;
+        showMessage("Saved player " + result.data.playerID + ": " + result.data.codename);
+      } else {
+        showMessage("Error: " + result.error);
+      }
+    }
+
+    function clearEntries() {
+      const boxes = document.querySelectorAll("input");
+      for (let i = 0; i < boxes.length; i++) {
+        boxes[i].value = "";
+      }
+      showMessage("All entries cleared.");
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "F3") {
+        event.preventDefault();
+        window.location.href = "/game";
+      }
+      if (event.key === "F12") {
+        event.preventDefault();
+        clearEntries();
+      }
+    });
+  </script>
+</body>
+</html>
