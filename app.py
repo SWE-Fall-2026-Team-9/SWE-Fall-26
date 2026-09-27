@@ -68,7 +68,7 @@ def receive_messages():
 
 @app.route('/')
 def home():
-	return render_template('player_entry.html')
+	return render_template('player_entry.html', destination=transmitter.ip)
 
 @app.route('/game')
 def game():
@@ -273,7 +273,7 @@ def change_network_destination():
 
 	with transmitterLock:
 		transmitter.ip = new_ip
-
+    print(f"Destination changed to {new_ip}")
 	return {'success': True, 'message': f'Network destination changed to {new_ip}.'}
 
 if __name__ == '__main__':
