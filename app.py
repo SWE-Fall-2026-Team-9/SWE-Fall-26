@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request
 from modules import db, udp
 import ipaddress
+import threading
 import time
 
 port = 8000
@@ -16,6 +17,11 @@ gamePlayers = {} # Player ID: current-game data
 playerEquipment = {} # Equipment ID: Player ID
 VALID_TEAMS = {'red', 'green'}
 MAX_PLAYERS_PER_TEAM = 15
+
+def receive_messages():
+	while True:
+		message = receiver.recv()
+		
 
 @app.route('/')
 def home():
@@ -215,4 +221,10 @@ def change_network_destination():
 		return {'success': False, 'error': str(e)}  # Something went wrong
 
 if __name__ == '__main__':
-	app.run(debug=True, port=port)
+	receiver_thread = threading.Thread(
+		target=receive_messages,
+		name='udp-receiver',
+		daemon=True
+	)
+	receiver_thread.start()
+	app.run(debug=True, port=port, use_reloader=False)
