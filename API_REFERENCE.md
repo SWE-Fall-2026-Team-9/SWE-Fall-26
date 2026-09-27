@@ -11,8 +11,11 @@ Use relative URLs when the frontend is served by the Flask application.
 ## Conventions
 
 - JSON requests require `Content-Type: application/json`.
+- Request bodies are limited to 64 KiB.
 - Every API response contains a boolean `success` field.
 - The frontend must inspect `success`; application errors may still use HTTP status `200`.
+- Player and equipment IDs must be positive integers no greater than `2147483647`. Booleans and fractional values are rejected.
+- Codenames are trimmed, cannot be blank, and must contain no more than 255 characters.
 - Database players are persistent PostgreSQL records containing an ID and codename.
 - Game players are temporary roster entries containing a database player, equipment assignment, team, and score.
 - Creating a database player preserves the player ID entered by the administrator.
@@ -187,8 +190,8 @@ Content-Type: application/json
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `playerID` | integer | Persistent database player ID |
-| `equipmentID` | integer | Equipment assigned for this game |
+| `playerID` | positive integer | Persistent database player ID |
+| `equipmentID` | positive integer | Equipment assigned for this game |
 | `team` | string | `red` or `green` |
 
 The server rejects duplicate players, duplicate equipment assignments, and teams containing more than 15 players. After validation, it broadcasts the equipment ID through UDP port `7500`.
@@ -237,7 +240,7 @@ Content-Type: application/json
 }
 ```
 
-The server sends the network-change control message through the current destination before changing the transmitter destination.
+The value must be a valid IPv4 address. The server normalizes the address before changing the transmitter destination.
 
 ## Frontend workflow
 
