@@ -23,15 +23,15 @@ def get_player():
 
 	try:
 		player = db.PlayerDatabase().getById(playerID)
+		if player is None:
+			return {'success': False, 'error': {
+				'playerID': playerID
+			}} # Player codename not found
 
 		return {'success': True, 'data': {
 			'playerID': playerID,
 			'codename': player.codename
 		}} # Player codename found
-	except AttributeError:
-		return {'success': False, 'error': {
-			'playerID': playerID
-		}} # Player codename not found
 	except Exception as e:
 		return {'success': False, 'error': str(e)} # Something went wrong
 
@@ -39,7 +39,7 @@ def get_player():
 def get_all_players():
 	try:
 		players = db.PlayerDatabase().getAll()
-		player_list = [{'id': player.id, 'codename': player.codename} for player in players]
+		player_list = [{'playerID': player.id, 'codename': player.codename} for player in players]
 
 		return {'success': True, 'data': player_list}  # All players retrieved
 	except Exception as e:
@@ -47,12 +47,18 @@ def get_all_players():
 
 @app.route('/setPlayer', methods=['POST'])
 def set_player():
+	data = request.get_json(silent=True)
+
 	try:
-		playerID = int(request.form.get('playerID')) # -1 by default
+		playerID = int(data.get('playerID')) # -1 by default
 	except (ValueError, TypeError):
 		return {'success': False, 'error': 'Invalid playerID'}
 
-	codename = request.form.get('codename')
+	codename = data.get('codename')
+	if not isinstance(codename, str) or not codename.strip():
+		return {'success': False, 'error': 'Codename is required'}
+
+	codename = codename.strip()
 
 	try:
 		player = db.Player(playerID, codename)
@@ -61,7 +67,10 @@ def set_player():
 		if any(p.id == playerID for p in players): # Player with ID exists, update codename
 			db.PlayerDatabase().update(player)
 		else: # Player with ID does not exist, insert new player
-			player.id = max([p.id for p in players]) + 1
+			if players:
+				player.id = max([p.id for p in players]) + 1
+			else:
+				player.id = 1 # Start with ID 1 if no players exist
 			db.PlayerDatabase().insert(player)
 
 		return {'success': True, 'data': {
@@ -74,8 +83,9 @@ def set_player():
 
 @app.route('/deletePlayer', methods=['POST'])
 def delete_player():
+	data = request.get_json(silent=True)
 	try:
-		playerID = int(request.form.get('playerID'))
+		playerID = int(data.get('playerID'))
 	except (ValueError, TypeError):
 		return {'success': False, 'error': 'Invalid playerID'}
 
