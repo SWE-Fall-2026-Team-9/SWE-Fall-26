@@ -15,7 +15,7 @@ Use relative URLs when the frontend is served by the Flask application.
 - The frontend must inspect `success`; application errors may still use HTTP status `200`.
 - Database players are persistent PostgreSQL records containing an ID and codename.
 - Game players are temporary roster entries containing a database player, equipment assignment, team, and score.
-- Creating a database player assigns `max(existing player IDs) + 1`, starting at `1` when the database is empty.
+- Creating a database player preserves the player ID entered by the administrator.
 
 ## Endpoint summary
 
@@ -88,17 +88,18 @@ Content-Type: application/json
 
 ```json
 {
+  "playerID": 7,
   "codename": "Alpha"
 }
 ```
 
-The server assigns the next player ID.
+The server rejects the request if the player ID is invalid or already exists.
 
 ```json
 {
   "success": true,
   "data": {
-    "playerID": 1,
+    "playerID": 7,
     "codename": "Alpha"
   }
 }
@@ -253,13 +254,13 @@ If the player is not found, prompt for a codename and create a persistent record
 const createResponse = await fetch('/api/database/players/create', {
   method: 'POST',
   headers: {'Content-Type': 'application/json'},
-  body: JSON.stringify({codename: 'Alpha'})
+  body: JSON.stringify({playerID: 7, codename: 'Alpha'})
 });
 
 const createdPlayer = await createResponse.json();
 ```
 
-Use the ID returned by the server when adding the player to the game:
+Use the confirmed ID returned by the server when adding the player to the game:
 
 ```javascript
 await fetch('/api/game/players/add', {

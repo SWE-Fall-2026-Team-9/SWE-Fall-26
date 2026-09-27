@@ -58,14 +58,22 @@ def create_database_player():
 	if not isinstance(data, dict):
 		return {'success': False, 'error': 'JSON body is required'}
 
+	try:
+		player_id = int(data.get('playerID'))
+	except (ValueError, TypeError):
+		return {'success': False, 'error': 'Invalid playerID'}
+	if player_id < 1:
+		return {'success': False, 'error': 'Invalid playerID'}
+
 	codename = data.get('codename')
 	if not isinstance(codename, str) or not codename.strip():
 		return {'success': False, 'error': 'Codename is required'}
 	codename = codename.strip()
 
 	try:
-		players = playerDB.getAll()
-		player_id = max((player.id for player in players), default=0) + 1
+		if playerDB.getById(player_id) is not None:
+			return {'success': False, 'error': f'Player with ID {player_id} already exists.'}
+
 		player = db.Player(player_id, codename)
 		playerDB.insert(player)
 

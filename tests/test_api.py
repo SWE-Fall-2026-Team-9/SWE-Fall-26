@@ -87,13 +87,19 @@ def run_tests(base_url):
         status, response = request_json(base_url, "GET", "/api/database/players")
         players = require_success(status, response, "List database players")
         require(isinstance(players, list), "Database player data is not an array")
+        existing_ids = [
+            player.get("playerID")
+            for player in players
+            if isinstance(player, dict) and isinstance(player.get("playerID"), int)
+        ]
+        test_player_id = max(existing_ids, default=0) + 1
         print_pass("listed persistent database players")
 
         status, response = request_json(
             base_url,
             "POST",
             "/api/database/players/create",
-            {},
+            {"playerID": test_player_id},
         )
         require(status == 200, f"Invalid-create test returned HTTP {status}")
         require(
@@ -106,7 +112,7 @@ def run_tests(base_url):
             base_url,
             "POST",
             "/api/database/players/create",
-            {"codename": test_codename},
+            {"playerID": test_player_id, "codename": test_codename},
         )
         created_player = require_success(status, response, "Create database player")
         require(isinstance(created_player, dict), "Created-player data is not an object")
@@ -116,8 +122,8 @@ def run_tests(base_url):
         )
         created_player_id = created_player.get("playerID")
         require(
-            isinstance(created_player_id, int),
-            f"Created player has an invalid ID: {created_player}",
+            created_player_id == test_player_id,
+            f"Server did not preserve player ID {test_player_id}: {created_player}",
         )
         print_pass(f"created persistent player {created_player_id}")
 
