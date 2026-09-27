@@ -61,6 +61,7 @@
 </head>
 <body>
 
+
   <div id="splash">
     <img src="\static\logo.jpg" alt="Splash screen">
   </div>
@@ -71,7 +72,7 @@
     <table class="red">
       <tr><th colspan="3">RED TEAM</th></tr>
       <tr><td></td><td>Player ID</td><td>Codename</td></tr>
-      {% for i in range(20) %}
+      {% for i in range(15) %}
       <tr>
         <td>{{ i }}</td>
         <td><input type = "text" id="red-id-{{ i }}" onchange="lookUpPlayer('red', { i })"></td>
@@ -83,7 +84,7 @@
     <table class="green">
       <tr><th colspan="3">GREEN TEAM</th></tr>
       <tr><td></td><td>Player ID</td><td>Codename</td></tr>
-      {% for i in range(20) %}
+      {% for i in range(15) %}
       <tr>
         <td>{{ i }}</td>
         <td><input type = "text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', { i })"></td>
@@ -94,38 +95,67 @@
   </div>
 
   <p id="message"></p>
-  <p>&lt;Tab&gt; next box | &lt;F3&gt; start game | &lt;F12&gt; clear all entries</p>
+  <p>
+  Network address:
+  <input type="text" id="network-ip" value="127.0.0.1">
+  <button onclick="changeNetwork()">Change</button>
+</p>
 
-  //Splash script
+  <p>&lt;Tab&gt; next box | &lt;F3&gt;  start game | &lt;F12&gt; clear all entries</p>
+
+
   <script>
+      //Splash script
     setTimeout(function () {
       document.getElementById("splash").style.display = "none";
       document.getElementById("red-id-0").focus();
     }, 3000);
 
+    const inGame = {};
+
     function showMessage(text) {
       document.getElementById("message").textContent = text;
+    }
+
+     async function postJson(url, data) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    }
+
+    async function removeFromGame(team, row) {
+      const key = team + "-" + row;
+      if (inGame[key] !== undefined) {
+        await postJson("/api/game/players/" + inGame[key] + "/remove", {});
+        delete inGame[key];
+      }
     }
 
     async function lookUpPlayer(team, row) {
       const idBox = document.getElementById(team + "-id-" + row);
       const nameBox = document.getElementById(team + "-name-" + row);
 
+      await removeFromGame(team, row);   
+      nameBox.value = "";
+      nameBox.dataset.inDatabase = "no";
+
       if (idBox.value === "") {
-        nameBox.value = "";
         return;
       }
 
-      const response = await fetch("/getPlayer?playerID=" + idBox.value);
+      const response = await fetch("/api/database/players/" + idBox.value);
       const result = await response.json();
 
       if (result.success) {
         nameBox.value = result.data.codename;
+        nameBox.dataset.inDatabase = "yes";
         showMessage("Found player " + result.data.playerID + ": " + result.data.codename);
       } else if (typeof result.error === "string") {
         showMessage("Error: " + result.error);
       } else {
-        nameBox.value = "";
         showMessage("Player " + idBox.value + " not found. Type a codename to add them.");
       }
     }
@@ -139,9 +169,12 @@
       }
 
       let playerID = -1;  
-      if (idBox.value !== "") {
-        playerID = Number(idBox.value);
+      if (nameBox.dataset.inDatabase === "yes") {
+        result = await postJson("/api/database/players/" + idBox.value + "/update", { codename: nameBox.value });
+       } else {
+        result = await postJson("/api/database/players/create", { codename: nameBox.value });
       }
+
 
       const response = await fetch("/setPlayer", {
         method: "POST",
@@ -158,18 +191,45 @@
       }
     }
 
-    function clearEntries() {
-      const boxes = document.querySelectorAll("input");
+    async function clearEntries() {
+      const boxes = document.querySelectorAll("table input");
       for (let i = 0; i < boxes.length; i++) {
         boxes[i].value = "";
+        boxes[i].dataset.inDatabase = "no";
       }
+      for (const key in inGame) {
+        delete inGame[key];
+      }
+      await postJson("/api/game/players/clear", {});
+
       showMessage("All entries cleared.");
+    }
+
+    async function changeNetwork() {
+      const ip = document.getElementById("network-ip").value;
+      const result = await postJson("/api/network/destination/change", { ip: ip });
+
+      if (result.success) {
+        showMessage(result.message);
+      } else {
+        showMessage("Error: " + result.error);
+      }
+    }
+    async function startGame() {
+      const response = await fetch("/api/game/players");
+      const result = await response.json();
+
+      if (result.data.length === 0) {
+        showMessage("Add at least one player with an equipment ID.");
+        return;
+      }
+      window.location.href = "/game";
     }
 
     document.addEventListener("keydown", function (event) {
       if (event.key === "F3") {
         event.preventDefault();
-        window.location.href = "/game";
+        StartGame();
       }
       if (event.key === "F12") {
         event.preventDefault();
