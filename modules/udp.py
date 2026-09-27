@@ -48,6 +48,9 @@ class Receiver:
         if not sep:
             raise ValueError("Message should be formatted INTEGER:INTEGER")
 
+        scored_id = int(scored_id)
+        tagged_id = int(tagged_id)
+
         return (scored_id, tagged_id)
 
     def close(self):
