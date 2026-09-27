@@ -1,0 +1,35 @@
+Written in your favorite language
+Will run on a Debian virtual machine (base machine provided by instructor)
+Needs to interface with a postgresql database
+already installed, database is photon, table is players
+Can use more than one window
+There will be two teams, red and green
+Need to set up 2 udp sockets for transmission of data to/from players
+Use localhost (127.0.0.1) for network address
+Use socket 7500 to broadcast, 7501 to receive (make sure to allow receive for any ip address)
+Include functionality to be able to change network address
+Format of transmission will be a single integer (equipment id of player who got hit)
+Format of received data will be integer:integer (equipment id of player transmitting:equipment id of player hit)
+After the game start count down timer (30 seconds) finishes, the software will broadcast code 202
+When the game ends, the software will broadcast code 221 three times
+When data is received, software will broadcast equipment id of player that was hit
+if player tags another player on their own team, broadcast their own equipment id as well of the equipment id of who they hit (two transmissions)
+If code 53 is received, the red base has been scored. If the player is on the green team, they will receive 100 points and the base icon (from the instructor's github) will be added to the left of their codename.
+if code 43 is received, the green base has been scored. If the player is on the red team, they will receive 100 points and the base icon (from the instructor's github) will be added to the left of their codename.
+Software displays a splash screen for 3 seconds (logo provided in instructor's github) upon startup
+Software will then move to a player entry screen (check screen captures for format)
+Operator will then fill in the player id number, system will query database for code name. If not found, allow for the entry of a new code name and then add to the database
+After player id number has been entered, system will prompt for the equipment id that the player is using (should be an integer)
+After equipment id is entered, system will broadcast the equipment id through udp port 7500
+After all players have been entered (max of 15 per team), pressing f5 (or a start button) will move to the next screen which is the play action screen.
+There will be a way to clear all entries with a single button (f12 or equivalent)
+Play action screen will have 3 areas that will be constantly updating
+There will be a count down timer for 6 minute games. Have a 30 second warning before starting.
+Play by play action will be shown in a window on the main screen. The events can scroll off as the window fills.
+Cumulative team scores will be constantly updating.
+Individual scores will be constantly updating (10 points awarded per opposing team player tag, -10 for same team player tag)
+If a player tags a member of his/her own team, the player tagged as well as the player doing the tagging both lose 10 points.
+Individual scores will be displayed from highest to lowest on each team
+High team score will be flashing during play
+During gameplay, a random mp3 music file will be playing (files provided in instructor's github). Make sure to synchronize the mp3 countdown with the game countdown.
+After game ends, leave display at play action screen. Provide a button to get back to the player entry screen
