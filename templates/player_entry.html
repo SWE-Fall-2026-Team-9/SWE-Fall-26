@@ -87,8 +87,8 @@
       {% for i in range(15) %}
       <tr>
         <td>{{ i }}</td>
-        <td><input type = "text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', { i })"></td>
-        <td><input type = "text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', { i })"></td>
+        <td><input type = "text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', {{ i }})"></td>
+        <td><input type = "text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', {{ i }})"></td>
       </tr>
       {% endfor %}
     </table>
