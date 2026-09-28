@@ -1,4 +1,5 @@
 <html>
+
 <head>
   <title>Entry Terminal</title>
   <style>
@@ -8,6 +9,7 @@
       font-family: Arial, sans-serif;
       text-align: center;
       margin: 0;
+      padding-top: 20px;
     }
 
     #splash {
@@ -59,6 +61,7 @@
     }
   </style>
 </head>
+
 <body>
 
 
@@ -70,25 +73,41 @@
 
   <div class="teams">
     <table class="red">
-      <tr><th colspan="3">RED TEAM</th></tr>
-      <tr><td></td><td>Player ID</td><td>Codename</td></tr>
+      <tr>
+        <th colspan="4">RED TEAM</th>
+      </tr>
+      <tr>
+        <td></td>
+        <td>Player ID</td>
+        <td>Codename</td>
+        <td>Equipment ID</td>
+      </tr>
       {% for i in range(15) %}
       <tr>
         <td>{{ i }}</td>
-        <td><input type = "text" id="red-id-{{ i }}" onchange="lookUpPlayer('red', {{ i }})"></td>
-        <td><input type = "text" id="red-name-{{ i }}" onchange="saveNewPlayer('red', {{ i }})"></td>
+        <td><input type="text" id="red-id-{{ i }}" onchange="lookUpPlayer('red', {{ i }})"></td>
+        <td><input type="text" id="red-name-{{ i }}" onchange="saveNewPlayer('red', {{ i }})"></td>
+        <td><input type="text" id="red-equip-{{ i }}" onchange="setEquipment('red', {{ i }})"></td>
       </tr>
       {% endfor %}
     </table>
 
     <table class="green">
-      <tr><th colspan="3">GREEN TEAM</th></tr>
-      <tr><td></td><td>Player ID</td><td>Codename</td></tr>
+      <tr>
+        <th colspan="4">GREEN TEAM</th>
+      </tr>
+      <tr>
+        <td></td>
+        <td>Player ID</td>
+        <td>Codename</td>
+        <td>Equipment ID</td>
+      </tr>
       {% for i in range(15) %}
       <tr>
         <td>{{ i }}</td>
-        <td><input type = "text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', {{ i }})"></td>
-        <td><input type = "text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', {{ i }})"></td>
+        <td><input type="text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', {{ i }})"></td>
+        <td><input type="text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', {{ i }})"></td>
+        <td><input type="text" id="green-equip-{{ i }}" onchange="setEquipment('green', {{ i }})"></td>
       </tr>
       {% endfor %}
     </table>
@@ -96,16 +115,16 @@
 
   <p id="message"></p>
   <p>
-  Network address:
-  <input type="text" id="network-ip" value="{{destination}}">
-  <button onclick="changeNetwork()">Change</button>
-</p>
+    Network address:
+    <input type="text" id="network-ip" value="{{destination}}">
+    <button onclick="changeNetwork()">Change</button>
+  </p>
 
-  <p>&lt;Tab&gt; next box | &lt;F3&gt;  start game | &lt;F12&gt; clear all entries</p>
+  <p>&lt;Tab&gt; next box | &lt;F5&gt; start game | &lt;F12&gt; clear all entries</p>
 
 
   <script>
-      //Splash script
+    // Splash script
     setTimeout(function () {
       document.getElementById("splash").style.display = "none";
       document.getElementById("red-id-0").focus();
@@ -113,11 +132,46 @@
 
     const inGame = {};
 
+    // Pre-fill the tables with players already in the current game
+    async function loadGamePlayers() {
+      try {
+        const response = await fetch("/api/game/players");
+        const result = await response.json();
+        if (!result.success) {
+          showMessage("Error: " + result.error);
+          return;
+        }
+
+        const nextRow = { red: 0, green: 0 };
+        for (const player of result.data) {
+          if (!(player.team in nextRow)) {
+            continue;
+          }
+          const row = nextRow[player.team]++;
+          const idBox = document.getElementById(player.team + "-id-" + row);
+          const nameBox = document.getElementById(player.team + "-name-" + row);
+          const equipBox = document.getElementById(player.team + "-equip-" + row);
+          if (!idBox || !nameBox || !equipBox) {
+            continue;
+          }
+          idBox.value = player.playerID;
+          nameBox.value = player.codename;
+          nameBox.dataset.inDatabase = "yes";
+          equipBox.value = player.equipmentID;
+          inGame[player.team + "-" + row] = player.playerID;
+        }
+      } catch (error) {
+        showMessage("Error loading current game players.");
+      }
+    }
+
+    loadGamePlayers();
+
     function showMessage(text) {
       document.getElementById("message").textContent = text;
     }
 
-     async function postJson(url, data) {
+    async function postJson(url, data) {
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -134,15 +188,106 @@
       }
     }
 
+    // Add the row's player to the current game once it has a saved player and an equipment ID
+    async function addToGame(team, row) {
+      const idBox = document.getElementById(team + "-id-" + row);
+      const nameBox = document.getElementById(team + "-name-" + row);
+      const equipBox = document.getElementById(team + "-equip-" + row);
+
+      if (nameBox.dataset.inDatabase !== "yes" || idBox.value === "") {
+        return;
+      }
+      if (equipBox.value === "") {
+        equipBox.focus();
+        showMessage("Enter an equipment ID for " + nameBox.value + ".");
+        return;
+      }
+      if (isEquipmentAssigned(equipBox.value, team, row)) {
+        const equipmentID = equipBox.value;
+        clearEquipment(team, row);
+        showMessage("Equipment ID " + equipmentID + " is already assigned.");
+        return;
+      }
+
+      await removeFromGame(team, row);
+      const result = await postJson("/api/game/players/add", {
+        playerID: idBox.value,
+        equipmentID: equipBox.value,
+        team: team
+      });
+
+      if (result.success) {
+        inGame[team + "-" + row] = result.data.playerID;
+        showMessage("Added " + result.data.codename + " to " + team + " team with equipment " + result.data.equipmentID + ".");
+      } else if (typeof result.error === "string" && result.error.includes("already in the game")) {
+        clearRow(team, row);
+        showMessage("Error: " + result.error);
+      } else if (typeof result.error === "string" && result.error.includes("is already assigned")) {
+        clearEquipment(team, row);
+        showMessage("Error: " + result.error);
+      } else {
+        showMessage("Error: " + result.error);
+      }
+    }
+
+    function clearRow(team, row) {
+      const idBox = document.getElementById(team + "-id-" + row);
+      const nameBox = document.getElementById(team + "-name-" + row);
+      const equipBox = document.getElementById(team + "-equip-" + row);
+      idBox.value = "";
+      nameBox.value = "";
+      nameBox.dataset.inDatabase = "no";
+      equipBox.value = "";
+      idBox.focus();
+    }
+
+    function clearEquipment(team, row) {
+      const equipBox = document.getElementById(team + "-equip-" + row);
+      equipBox.value = "";
+      equipBox.focus();
+    }
+
+    // True if another row already in the game is using this equipment ID
+    function isEquipmentAssigned(equipmentID, team, row) {
+      const thisKey = team + "-" + row;
+      for (const key in inGame) {
+        if (key === thisKey) {
+          continue;
+        }
+        const [otherTeam, otherRow] = key.split("-");
+        const otherBox = document.getElementById(otherTeam + "-equip-" + otherRow);
+        if (otherBox && Number(otherBox.value) === Number(equipmentID)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function isPlayerInGame(playerID) {
+      return Object.values(inGame).includes(Number(playerID));
+    }
+
+    async function setEquipment(team, row) {
+      await removeFromGame(team, row);
+      await addToGame(team, row);
+    }
+
     async function lookUpPlayer(team, row) {
       const idBox = document.getElementById(team + "-id-" + row);
       const nameBox = document.getElementById(team + "-name-" + row);
 
-      await removeFromGame(team, row);   
+      await removeFromGame(team, row);
       nameBox.value = "";
       nameBox.dataset.inDatabase = "no";
 
       if (idBox.value === "") {
+        return;
+      }
+
+      if (isPlayerInGame(idBox.value)) {
+        const playerID = idBox.value;
+        clearRow(team, row);
+        showMessage("Player " + playerID + " is already in the game.");
         return;
       }
 
@@ -153,9 +298,9 @@
         nameBox.value = result.data.codename;
         nameBox.dataset.inDatabase = "yes";
         showMessage("Found player " + result.data.playerID + ": " + result.data.codename);
-      } else if (typeof result.error === "string") {
-        showMessage("Error: " + result.error);
+        await addToGame(team, row);
       } else {
+        nameBox.focus();
         showMessage("Player " + idBox.value + " not found. Type a codename to add them.");
       }
     }
@@ -167,25 +312,26 @@
       if (nameBox.value === "") {
         return;
       }
-
-      let playerID = -1;  
-      if (nameBox.dataset.inDatabase === "yes") {
-        result = await postJson("/api/database/players/" + idBox.value + "/update", { codename: nameBox.value });
-       } else {
-        result = await postJson("/api/database/players/create", { codename: nameBox.value });
+      if (idBox.value === "") {
+        idBox.focus();
+        showMessage("Enter a player ID first.");
+        return;
       }
 
-
-      const response = await fetch("/setPlayer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ playerID: playerID, codename: nameBox.value })
-      });
-      const result = await response.json();
+      let result;
+      if (nameBox.dataset.inDatabase === "yes") {
+        result = await postJson("/api/database/players/" + idBox.value + "/update", { codename: nameBox.value });
+      } else {
+        result = await postJson("/api/database/players/create", { playerID: idBox.value, codename: nameBox.value });
+      }
 
       if (result.success) {
-        idBox.value = result.data.playerID;
+        nameBox.value = result.data.codename;
+        nameBox.dataset.inDatabase = "yes";
         showMessage("Saved player " + result.data.playerID + ": " + result.data.codename);
+        if (inGame[team + "-" + row] === undefined) {
+          await addToGame(team, row);
+        }
       } else {
         showMessage("Error: " + result.error);
       }
@@ -227,9 +373,9 @@
     }
 
     document.addEventListener("keydown", function (event) {
-      if (event.key === "F3") {
+      if (event.key === "F5") {
         event.preventDefault();
-        StartGame();
+        startGame();
       }
       if (event.key === "F12") {
         event.preventDefault();
@@ -238,4 +384,5 @@
     });
   </script>
 </body>
+
 </html>
