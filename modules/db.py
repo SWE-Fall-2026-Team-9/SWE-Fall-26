@@ -1,6 +1,6 @@
 import psycopg
 
-DEFAULT_CONNINFO = "host=127.0.0.1 port=5432 dbname=photon user=student"
+DEFAULT_CONNINFO = "host=/var/run/postgresql,127.0.0.1 port=5432 dbname=photon user=student"
 
 class Player:
     def __init__(self, id, codename):
