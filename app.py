@@ -72,6 +72,7 @@ def home():
 
 @app.route('/game')
 def game():
+	transmitter.send(202)
 	return render_template('game.html')
 
 @app.route('/api/database/players', methods=['GET'])
