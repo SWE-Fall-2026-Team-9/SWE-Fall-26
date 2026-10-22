@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Play Action</title>
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+
+    /* The big yellow box around everything */
+    .frame {
+      position: relative;
+      max-width: 900px;
+      margin: 20px auto;
+      border: 4px solid #e8e27a;
+      border-radius: 16px;
+      padding: 10px 20px 0 20px;
+    }
+
+    .label {
+      position: absolute;
+      top: -18px;
+      right: 30px;
+      background-color: black;
+      padding: 0 6px;
+      color: #3fd8ff;
+      font-size: 26px;
+      font-weight: bold;
+      font-style: italic;
+    }
+
+    .teams {
+      display: flex;
+      gap: 40px;
+      min-height: 220px;
+    }
+
+    .team {
+      width: 50%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .team h2 {
+      text-align: center;
+      font-size: 30px;
+      margin: 10px 0;
+    }
+
+    .players {
+      flex-grow: 1;
+    }
+
+    .player {
+      display: flex;
+      justify-content: space-between;
+      font-size: 22px;
+      margin: 4px 0;
+    }
+
+    .total {
+      text-align: right;
+      font-size: 22px;
+      margin: 10px 0;
+    }
+
+    .red {
+      color: #ff8a80;
+    }
+
+    .green {
+      color: #69f0ae;
+    }
+
+    .action {
+      position: relative;
+      border: 4px solid #e8e27a;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+
+    #events {
+      background-color: #2b3a9e;
+      height: 280px;
+      overflow-y: auto;
+      border-radius: 6px 6px 0 0;
+      padding: 24px 12px 12px 12px;
+      font-size: 22px;
+      font-weight: bold;
+      font-style: italic;
+    }
+
+    .timer {
+      text-align: right;
+      font-size: 26px;
+      font-weight: bold;
+      padding: 8px 16px;
+      border-top: 4px solid #e8e27a;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="frame">
+    <div class="label">Current Scores</div>
+
+    <div class="teams">
+      <div class="team">
+        <h2>RED TEAM</h2>
+        <div class="players" id="red-players"></div>
+        <div class="total red" id="red-total">0</div>
+      </div>
+
+      <div class="team">
+        <h2>GREEN TEAM</h2>
+        <div class="players" id="green-players"></div>
+        <div class="total green" id="green-total">0</div>
+      </div>
+    </div>
+
+    <div class="action">
+      <div class="label">Current Game Action</div>
+      <div id="events"></div>
+      <div class="timer">Time Remaining: <span id="time">--:--</span></div>
+    </div>
+    <br>
+  </div>
+
+  <script>
+    // Make one row for a player: codename on the left, score on the right
+    function makePlayerRow(player) {
+      const row = document.createElement("div");
+      row.className = "player " + player.team;
+
+      const name = document.createElement("span");
+      name.textContent = player.codename;
+
+      const score = document.createElement("span");
+      score.textContent = player.score;
+
+      row.appendChild(name);
+      row.appendChild(score);
+      return row;
+    }
+
+    async function showPlayers() {
+      const response = await fetch("/api/game/players");
+      const result = await response.json();
+
+      if (!result.success) {
+        return;
+      }
+
+      const players = result.data;
+      players.sort(function (a, b) {
+        return b.score - a.score;
+      });
+
+      const redList = document.getElementById("red-players");
+      const greenList = document.getElementById("green-players");
+      redList.innerHTML = "";
+      greenList.innerHTML = "";
+
+      let redTotal = 0;
+      let greenTotal = 0;
+
+      for (const player of players) {
+        if (player.team === "red") {
+          redList.appendChild(makePlayerRow(player));
+          redTotal = redTotal + player.score;
+        } else {
+          greenList.appendChild(makePlayerRow(player));
+          greenTotal = greenTotal + player.score;
+        }
+      }
+
+      document.getElementById("red-total").textContent = redTotal;
+      document.getElementById("green-total").textContent = greenTotal;
+    }
+
+    showPlayers();
+    setInterval(showPlayers, 1000);
+  </script>
+</body>
+</html>
