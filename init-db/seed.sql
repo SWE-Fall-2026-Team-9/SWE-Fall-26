@@ -2,8 +2,9 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 13.14 (Debian 13.14-0+deb11u1)
--- Dumped by pg_dump version 13.14 (Debian 13.14-0+deb11u1)
+
+-- Dumped from database version 13.16 (Debian 13.16-0+deb11u1)
+-- Dumped by pg_dump version 17.11 (Debian 17.11-0+deb13u1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -15,6 +16,14 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: public; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+-- *not* creating schema, since initdb creates it
+
+
 
 SET default_tablespace = '';
 
@@ -42,5 +51,15 @@ COPY public.players (id, codename) FROM stdin;
 
 
 --
+-- Name: SCHEMA public; Type: ACL; Schema: -; Owner: postgres
+--
+
+REVOKE USAGE ON SCHEMA public FROM PUBLIC;
+GRANT ALL ON SCHEMA public TO PUBLIC;
+
+
+--
 -- PostgreSQL database dump complete
 --
+
+
