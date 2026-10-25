@@ -101,9 +101,40 @@
       padding: 8px 16px;
       border-top: 4px solid #e8e27a;
     }
+
+    .countdown-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .countdown-screen[hidden] {
+      display: none;
+    }
+
+    .countdown-image {
+      width: min(90vw, 1232px);
+      max-height: 85vh;
+      object-fit: contain;
+    }
+
   </style>
 </head>
 <body>
+
+  <div class="countdown-screen" id="countdown-screen" aria-hidden="true">
+    <img
+      class="countdown-image"
+      id="countdown-image"
+      src="{{ url_for('static', filename='countdown_images/countdown30.png') }}"
+      alt=""
+    >
+  </div>
 
   <div class="frame">
     <div class="label">Current Scores</div>
@@ -184,6 +215,39 @@
 
     showPlayers();
     setInterval(showPlayers, 1000);
+
+    const countdownDuration = 30;
+    const countdownDurationMs = countdownDuration * 1000;
+    const countdownEnd = Date.now() + countdownDurationMs;
+    const countdownScreen = document.getElementById("countdown-screen");
+    const countdownImage = document.getElementById("countdown-image");
+    const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
+    let displayedImage = null;
+    let countdownInterval;
+
+    function updateCountdown() {
+      const remainingMs = Math.max(0, countdownEnd - Date.now());
+
+      if (remainingMs > 0) {
+        const elapsedMs = countdownDurationMs - remainingMs;
+        const imageIndex = Math.min(30, Math.floor(elapsedMs * 31 / countdownDurationMs));
+        const imageNumber = 30 - imageIndex;
+        const extension = imageNumber === 12 || imageNumber >= 15 ? "png" : "jpg";
+        const imageName = "countdown" + imageNumber + "." + extension;
+        if (displayedImage !== imageName) {
+          countdownImage.src = countdownAssetUrl + imageName;
+          displayedImage = imageName;
+        }
+      }
+
+      if (remainingMs === 0) {
+        countdownScreen.hidden = true;
+        clearInterval(countdownInterval);
+      }
+    }
+
+    updateCountdown();
+    countdownInterval = setInterval(updateCountdown, 100);
   </script>
 </body>
 </html>
