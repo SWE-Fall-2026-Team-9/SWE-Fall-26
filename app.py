@@ -3,6 +3,7 @@ from modules import db, udp
 import ipaddress
 import threading
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+from psycopg import OperationalError
 
 port = 8000
 DEFAULT_DEST_ADDR = '127.0.0.1'
@@ -46,10 +47,17 @@ def parse_positive_integer(data, field_name):
 def handle_request_too_large(error):
 	return {'success': False, 'error': 'Request body is too large'}, 413
 
+@app.errorhandler(OperationalError)
+def handle_database_error(error):
+	app.logger.warning('Database connection cannot be established')
+	return {'success': False, 'error': 'Database cannot be connected'}, 200
+
+@app.errorhandler(HTTPException)
+def handle_http_error(error):
+	return error
+
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
-	if isinstance(error, HTTPException):
-		return error
 	app.logger.exception('Unhandled server error')
 	return {'success': False, 'error': 'Internal server error'}, 500
 
@@ -75,28 +83,27 @@ def game():
 	transmitter.send(202)
 	return render_template('game.html')
 
+@app.route('/api/database/status', methods=['GET'])
+def get_database_status():
+	playerDB.getNone()
+	return {'success': True}
+
 @app.route('/api/database/players', methods=['GET'])
 def get_database_players():
-	try:
-		players = playerDB.getAll()
-		player_list = [{'playerID': player.id, 'codename': player.codename} for player in players]
-		return {'success': True, 'data': player_list}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}
+	players = playerDB.getAll()
+	player_list = [{'playerID': player.id, 'codename': player.codename} for player in players]
+	return {'success': True, 'data': player_list}
 
 @app.route('/api/database/players/<int:player_id>', methods=['GET'])
 def get_database_player(player_id):
-	try:
-		player = playerDB.getById(player_id)
-		if player is None:
-			return {'success': False, 'error': f'Player with ID {player_id} not found.'}
+	player = playerDB.getById(player_id)
+	if player is None:
+		return {'success': False, 'error': f'Player with ID {player_id} not found.'}
 
-		return {'success': True, 'data': {
-			'playerID': player.id,
-			'codename': player.codename
-		}}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}
+	return {'success': True, 'data': {
+		'playerID': player.id,
+		'codename': player.codename
+	}}
 
 @app.route('/api/database/players/create', methods=['POST'])
 def create_database_player():
@@ -115,20 +122,17 @@ def create_database_player():
 	if len(codename) > MAX_CODENAME_LENGTH:
 		return {'success': False, 'error': 'Codename must be 255 characters or fewer'}
 
-	try:
-		with stateLock:
-			if playerDB.getById(player_id) is not None:
-				return {'success': False, 'error': f'Player with ID {player_id} already exists.'}
+	with stateLock:
+		if playerDB.getById(player_id) is not None:
+			return {'success': False, 'error': f'Player with ID {player_id} already exists.'}
 
-			player = db.Player(player_id, codename)
-			playerDB.insert(player)
+		player = db.Player(player_id, codename)
+		playerDB.insert(player)
 
-		return {'success': True, 'data': {
-			'playerID': player.id,
-			'codename': player.codename
-		}}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}
+	return {'success': True, 'data': {
+		'playerID': player.id,
+		'codename': player.codename
+	}}
 
 @app.route('/api/database/players/<int:player_id>/update', methods=['POST'])
 def update_database_player(player_id):
@@ -143,38 +147,32 @@ def update_database_player(player_id):
 	if len(codename) > MAX_CODENAME_LENGTH:
 		return {'success': False, 'error': 'Codename must be 255 characters or fewer'}
 
-	try:
-		with stateLock:
-			if playerDB.getById(player_id) is None:
-				return {'success': False, 'error': f'Player with ID {player_id} not found.'}
+	with stateLock:
+		if playerDB.getById(player_id) is None:
+			return {'success': False, 'error': f'Player with ID {player_id} not found.'}
 
-			player = db.Player(player_id, codename)
-			playerDB.update(player)
-			if player_id in gamePlayers:
-				gamePlayers[player_id]['codename'] = codename
+		player = db.Player(player_id, codename)
+		playerDB.update(player)
+		if player_id in gamePlayers:
+			gamePlayers[player_id]['codename'] = codename
 
-		return {'success': True, 'data': {
-			'playerID': player.id,
-			'codename': player.codename
-		}}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}
+	return {'success': True, 'data': {
+		'playerID': player.id,
+		'codename': player.codename
+	}}
 
 @app.route('/api/database/players/<int:player_id>/delete', methods=['POST'])
 def delete_database_player(player_id):
-	try:
-		with stateLock:
-			deleted_count = playerDB.delete(player_id)
-			if deleted_count == 0:
-				return {'success': False, 'error': f'Player with ID {player_id} not found.'}
+	with stateLock:
+		deleted_count = playerDB.delete(player_id)
+		if deleted_count == 0:
+			return {'success': False, 'error': f'Player with ID {player_id} not found.'}
 
-			game_player = gamePlayers.pop(player_id, None)
-			if game_player is not None:
-				playerEquipment.pop(game_player.get('equipmentID'), None)
-			scores.pop(player_id, None)
-		return {'success': True, 'message': f'Player with ID {player_id} deleted.'}
-	except Exception as e:
-		return {'success': False, 'error': str(e)}
+		game_player = gamePlayers.pop(player_id, None)
+		if game_player is not None:
+			playerEquipment.pop(game_player.get('equipmentID'), None)
+		scores.pop(player_id, None)
+	return {'success': True, 'message': f'Player with ID {player_id} deleted.'}
 
 @app.route('/api/game/players', methods=['GET'])
 def get_game_players():

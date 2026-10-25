@@ -19,6 +19,10 @@ class PlayerDatabase:
     def _connect(self):
         return psycopg.connect(self.conninfo)
 
+    def getNone(self):
+        with self._connect() as conn, conn.cursor():
+            pass
+
     def getAll(self):
         with self._connect() as conn, conn.cursor() as cur:
             cur.execute("SELECT id, codename FROM players")

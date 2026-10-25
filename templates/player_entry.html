@@ -130,6 +130,21 @@
       document.getElementById("red-id-0").focus();
     }, 3000);
 
+    async function checkDBStatus() {
+      try {
+        const response = await fetch("/api/database/status");
+        const result = await response.json();
+
+        if (!result.success) {
+          showMessage("Error: " + result.error);
+        }
+      } catch (error) {
+        showMessage("Error loading database status.")
+      }
+    }
+
+    checkDBStatus();
+
     const inGame = {};
 
     // Pre-fill the tables with players already in the current game
@@ -300,8 +315,11 @@
         showMessage("Found player " + result.data.playerID + ": " + result.data.codename);
         await addToGame(team, row);
       } else {
-        nameBox.focus();
-        showMessage("Player " + idBox.value + " not found. Type a codename to add them.");
+        if (result.error.includes("not found")) {
+          nameBox.focus();
+        }
+
+        showMessage("Error: " + result.error);
       }
     }
 
