@@ -50,7 +50,7 @@ def handle_request_too_large(error):
 @app.errorhandler(OperationalError)
 def handle_database_error(error):
 	app.logger.warning('Database connection cannot be established')
-	return {'success': False, 'error': 'Database cannot be connected'}, 200
+	return {'success': False, 'error': 'Database cannot be connected'}, 500
 
 @app.errorhandler(HTTPException)
 def handle_http_error(error):
