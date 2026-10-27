@@ -33,7 +33,7 @@ SWE-Fall-26
 Run the setup script:
 
 ```bash
-sudo bash ./start.sh
+bash ./start.sh
 ```
 
 The application will be available at `http://127.0.0.1:8000`
