@@ -102,10 +102,21 @@
       padding: 8px 16px;
       border-top: 4px solid #e8e27a;
     }
+
+    .player-name-container {
+      display: flex;
+      flex-direction: row;
+      gap: 10px;
+    }
+
+    .hidden {
+      visibility: hidden;
+    }
   </style>
 </head>
 
 <body>
+
   <div class="frame">
     <div class="label">Current Scores</div>
 
@@ -113,13 +124,13 @@
       <div class="team">
         <h2>RED TEAM</h2>
         <div class="players" id="red-players"></div>
-        <div class="total red" id="red-total">0</div>
+        <div class="total red" id="red-total">Total: 0</div>
       </div>
 
       <div class="team">
         <h2>GREEN TEAM</h2>
         <div class="players" id="green-players"></div>
-        <div class="total green" id="green-total">0</div>
+        <div class="total green" id="green-total">Total: 0</div>
       </div>
     </div>
 
@@ -137,13 +148,26 @@
       const row = document.createElement("div");
       row.className = "player " + player.team;
 
+      const playerNameContainer = document.createElement("div");
+      playerNameContainer.className = "player-name-container";
+
+      const baseIcon = document.createElement("img");
+      baseIcon.src = "{{ url_for('static', filename='baseicon.jpg') }}";
+      baseIcon.classList.add("hidden");
+      playerNameContainer.appendChild(baseIcon);
+
+      if (player.hasHitBase) {
+        baseIcon.classList.remove("hidden");
+      }
+
       const name = document.createElement("span");
       name.textContent = player.codename;
+      playerNameContainer.appendChild(name);
 
       const score = document.createElement("span");
       score.textContent = player.score;
 
-      row.appendChild(name);
+      row.appendChild(playerNameContainer);
       row.appendChild(score);
       return row;
     }
@@ -179,8 +203,8 @@
         }
       }
 
-      document.getElementById("red-total").textContent = redTotal;
-      document.getElementById("green-total").textContent = greenTotal;
+      document.getElementById("red-total").textContent = "Total: " + redTotal;
+      document.getElementById("green-total").textContent = "Total: " + greenTotal;
     }
 
     showPlayers();
