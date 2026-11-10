@@ -17,7 +17,7 @@ class Transmitter:
         # Format is a single integer; ASCII is sufficient
         bytes = message.encode("ascii", errors = "replace") + b'\x00'
         self.sock.sendto(bytes, (self.ip, Transmitter.PORT))
-        print(f"Sent: {message}")
+        print(f"Sent UDP on {self.ip}: {message}")
 
     def close(self):
         self.sock.close()
@@ -41,7 +41,7 @@ class Receiver:
         bytes, addr  = self.sock.recvfrom(Receiver.BUFFER_SIZE)
         # Format is of integers and ':'; ASCII is sufficient
         message = bytes.rstrip(b'\x00').decode("ascii", errors = "replace")
-        print(f"Received from {addr}: {message}")
+        print(f"Received UDP from {addr}: {message}")
 
         scored_id, sep, tagged_id = message.partition(":")
 
