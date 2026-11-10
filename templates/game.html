@@ -124,6 +124,8 @@
     }
 
   </style>
+
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
 
@@ -162,6 +164,12 @@
   </div>
 
   <script>
+    const socket = io();
+    socket.on('player-hit', data => {
+      const playerID = JSON.parse(data).playerID;
+
+    })
+
     // Make one row for a player: codename on the left, score on the right
     function makePlayerRow(player) {
       const row = document.createElement("div");

@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+from flask_socketio import SocketIO
 from modules import db, udp
 import ipaddress
 import threading
@@ -13,6 +14,7 @@ app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
 transmitter = udp.Transmitter(DEFAULT_DEST_ADDR)
 receiver = udp.Receiver()
 playerDB = db.PlayerDatabase()
+socket = SocketIO(app)
 
 scores = {}
 gamePlayers = {} # Player ID: current-game data
@@ -65,7 +67,9 @@ def receive_messages():
 	while True:
 		try:
 			message = receiver.recv()
-			# TODO: Process the received message.
+
+			equipment_id = 1 # TODO: actually parse message
+			socket.emit('player-hit', {'playerID': playerEquipment[equipment_id]})
 		except ValueError as error:
 			app.logger.warning('Ignored invalid UDP message: %s', error)
 		except OSError as error:
@@ -282,4 +286,5 @@ if __name__ == '__main__':
 		daemon=True
 	)
 	receiver_thread.start()
+	socket.run(app, debug=True, port=port, use_reloader=False)
 	app.run(debug=True, port=port, use_reloader=False)
