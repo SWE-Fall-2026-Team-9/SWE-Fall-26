@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request
 import logging
+from flask_socketio import SocketIO
 from modules import db, udp
 import ipaddress
 import threading
@@ -16,6 +17,7 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 transmitter = udp.Transmitter(DEFAULT_DEST_ADDR, app.logger)
 receiver = udp.Receiver(app.logger)
 playerDB = db.PlayerDatabase()
+socket = SocketIO(app)
 
 scores = {}
 gamePlayers = {} # Player ID: current-game data
@@ -316,4 +318,5 @@ if __name__ == '__main__':
 		daemon=True
 	)
 	receiver_thread.start()
+	socket.run(app, debug=True, port=port, use_reloader=False)
 	app.run(debug=True, port=port, use_reloader=False)
