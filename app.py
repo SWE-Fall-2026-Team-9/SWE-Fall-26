@@ -65,8 +65,36 @@ def handle_unexpected_error(error):
 def receive_messages():
 	while True:
 		try:
-			message = receiver.recv()
-			# TODO: Process the received message.
+			scored_id, tagged_id = receiver.recv()
+
+			with stateLock:
+				player = gamePlayers[scored_id]
+
+				# Team check may be unnecessary:
+				green_scored = tagged_id == 53 and player['team'] == 'green'
+				red_scored = tagged_id == 43 and player['team'] == 'red'
+
+				# Base has been scored
+				# Flag check is technically unnecessary:
+				if (green_scored or red_scored) and not player['hasHitBase']:
+					scores[scored_id] += 100
+					# Set base flag:
+					player['hasHitBase'] = True
+					continue
+
+				tagged = gamePlayers[tagged_id]
+				tagged_ids  = [tagged_id]
+
+				if player['team'] != tagged['team']:
+					scores[scored_id] += 10
+				else:
+					scores[scored_id] -= 10
+					scores[tagged_id] -= 10
+					tagged_ids.append(scored_id)
+
+				with transmitterLock:
+					for id in tagged_ids:
+						transmitter.send(id)
 		except ValueError as error:
 			app.logger.warning('Ignored invalid UDP message: %s', error)
 		except OSError as error:
