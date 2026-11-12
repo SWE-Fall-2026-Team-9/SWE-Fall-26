@@ -223,7 +223,8 @@ def add_game_player():
 				'playerID': player_id,
 				'codename': player.codename,
 				'equipmentID': equipment_id,
-				'team': team
+				'team': team,
+				'hasHitBase': False
 			}
 			playerEquipment[equipment_id] = player_id
 			scores[player_id] = 0
