@@ -310,12 +310,22 @@ messages. Events are broadcast whenever the UDP receiver processes an inbound
   "hitEquipmentID": 34,
   "transmitter": {"playerID": 1, "codename": "Alpha", "team": "red"},
   "hit": {"playerID": 2, "codename": "Bravo", "team": "green"},
-  "message": "Alpha tagged Bravo"
+  "timestamp": "14:32:07",
+  "points": 10,
+  "scoreChanges": [
+    {"playerID": 1, "codename": "Alpha", "points": 10}
+  ],
+  "message": "Alpha tagged Bravo (+10)"
 }
 ```
 
 `transmitter` or `hit` is `null` when the equipment ID is not assigned to a
 current-game player, and the message falls back to `Equipment <id>`.
+
+`points` and `scoreChanges` describe the expected score change for display.
+They are not applied to the server's score state; the scoring daemon owns that
+logic. A same-team tag reports `-10` for both players and shows
+`Alpha tagged teammate Charlie (-10 each)`.
 
 ### Base event
 
@@ -328,14 +338,27 @@ current-game player, and the message falls back to `Equipment <id>`.
   "scoringEquipmentID": 34,
   "transmitter": {"playerID": 2, "codename": "Bravo", "team": "green"},
   "hit": null,
-  "message": "Bravo hit the red base"
+  "timestamp": "14:32:19",
+  "points": 100,
+  "scoreChanges": [
+    {"playerID": 2, "codename": "Bravo", "points": 100}
+  ],
+  "message": "Bravo hit the red base (+100)"
 }
 ```
 
 The base code (`53` for red, `43` for green) may appear as either equipment ID;
-`scoringEquipmentID` identifies the player equipment involved. Events are
-descriptive only. Scoring rules are not applied by this event pipeline yet;
-`handle_game_event()` in `app.py` is the extension point for the scoring daemon.
+`scoringEquipmentID` identifies the player equipment involved. A valid
+opposing-base hit reports `points: 100`; an invalid base hit reports
+`points: 0` and a `(no points)` message.
+
+Events are descriptive only. Scoring rules are not applied by this event
+pipeline yet; `handle_game_event()` in `app.py` is the extension point for the
+scoring daemon.
+
+For every inbound event, the server broadcasts the hit equipment ID back to the
+UDP destination on port `7500`. A same-team tag also broadcasts the tagging
+equipment ID, producing two outbound transmissions.
 
 ## Page routes
 

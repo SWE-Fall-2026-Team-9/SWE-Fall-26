@@ -165,7 +165,8 @@
 
       const eventBox = document.createElement("div");
       eventBox.className = "event" + (event.type === "base-hit" ? " event-base" : "");
-      eventBox.textContent = event.message;
+      const timestamp = event.timestamp || new Date().toLocaleTimeString([], { hour12: false });
+      eventBox.textContent = "[" + timestamp + "] " + event.message;
 
       const events = document.getElementById("events");
       // Newest events go at the top; older events move down the feed.
