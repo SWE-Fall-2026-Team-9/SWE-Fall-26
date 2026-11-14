@@ -3,6 +3,7 @@ from flask_socketio import SocketIO
 from modules import db, udp
 import ipaddress
 import threading
+import time
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from psycopg import OperationalError
 
@@ -92,23 +93,41 @@ def describe_equipment(equipment_id):
 def build_game_event(transmitter_id, hit_id):
 	"""Build the client-facing event for one inbound UDP message.
 
-	This only describes what happened. Applying scoring rules is left to the
-	scoring daemon, which can extend handle_game_event().
+	The expected point changes are included for display only. Applying them to
+	scores is left to the scoring daemon, which can extend handle_game_event().
 	"""
 	transmitter = find_game_player_by_equipment(transmitter_id)
 	hit = find_game_player_by_equipment(hit_id)
+	timestamp = time.strftime('%H:%M:%S')
 
 	base_codes = (
-		(RED_BASE_CODE, 'red'),
-		(GREEN_BASE_CODE, 'green')
+		(RED_BASE_CODE, 'red', 'green'),
+		(GREEN_BASE_CODE, 'green', 'red')
 	)
-	for base_code, base_name in base_codes:
+	for base_code, base_name, scoring_team in base_codes:
 		if transmitter_id == base_code:
 			scoring_equipment_id = hit_id
 		elif hit_id == base_code:
 			scoring_equipment_id = transmitter_id
 		else:
 			continue
+
+		scoring_player = find_game_player_by_equipment(scoring_equipment_id)
+		points = None
+		score_changes = []
+		point_text = ''
+		if scoring_player is not None:
+			if scoring_player['team'] == scoring_team:
+				points = 100
+				point_text = ' (+100)'
+				score_changes = [{
+					'playerID': scoring_player['playerID'],
+					'codename': scoring_player['codename'],
+					'points': 100
+				}]
+			else:
+				points = 0
+				point_text = ' (no points)'
 
 		return {
 			'type': 'base-hit',
@@ -118,8 +137,40 @@ def build_game_event(transmitter_id, hit_id):
 			'scoringEquipmentID': scoring_equipment_id,
 			'transmitter': transmitter,
 			'hit': hit,
-			'message': f'{describe_equipment(scoring_equipment_id)} hit the {base_name} base'
+			'timestamp': timestamp,
+			'points': points,
+			'scoreChanges': score_changes,
+			'message': f'{describe_equipment(scoring_equipment_id)} hit the {base_name} base{point_text}'
 		}
+
+	points = None
+	score_changes = []
+	if transmitter is not None and hit is not None:
+		if transmitter['team'] == hit['team']:
+			points = -10
+			score_changes = [
+				{
+					'playerID': transmitter['playerID'],
+					'codename': transmitter['codename'],
+					'points': -10
+				},
+				{
+					'playerID': hit['playerID'],
+					'codename': hit['codename'],
+					'points': -10
+				}
+			]
+			message = f'{transmitter["codename"]} tagged teammate {hit["codename"]} (-10 each)'
+		else:
+			points = 10
+			score_changes = [{
+				'playerID': transmitter['playerID'],
+				'codename': transmitter['codename'],
+				'points': 10
+			}]
+			message = f'{transmitter["codename"]} tagged {hit["codename"]} (+10)'
+	else:
+		message = f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
 
 	return {
 		'type': 'tag',
@@ -127,7 +178,10 @@ def build_game_event(transmitter_id, hit_id):
 		'hitEquipmentID': hit_id,
 		'transmitter': transmitter,
 		'hit': hit,
-		'message': f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
+		'timestamp': timestamp,
+		'points': points,
+		'scoreChanges': score_changes,
+		'message': message
 	}
 
 def handle_game_event(event):
@@ -166,7 +220,7 @@ def process_game_event(transmitter_id, hit_id):
 	event = handle_game_event(event)
 	send_event_response(event)
 	socket.emit('game-event', event)
-	app.logger.info('Game event: %s', event['message'])
+	app.logger.info('Game event [%s]: %s', event['timestamp'], event['message'])
 
 def receive_messages():
 	while True:

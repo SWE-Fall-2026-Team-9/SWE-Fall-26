@@ -106,7 +106,12 @@ class BuildGameEventTests(EventTestBase):
         self.assertEqual(event["type"], "tag")
         self.assertEqual(event["transmitterEquipmentID"], 12)
         self.assertEqual(event["hitEquipmentID"], 34)
-        self.assertEqual(event["message"], "Alpha tagged Bravo")
+        self.assertEqual(event["message"], "Alpha tagged Bravo (+10)")
+        self.assertEqual(event["points"], 10)
+        self.assertEqual(event["scoreChanges"], [
+            {"playerID": 1, "codename": "Alpha", "points": 10},
+        ])
+        self.assertRegex(event["timestamp"], r"^\d{2}:\d{2}:\d{2}$")
         self.assertEqual(
             event["transmitter"],
             {"playerID": 1, "codename": "Alpha", "team": "red"},
@@ -123,6 +128,8 @@ class BuildGameEventTests(EventTestBase):
         self.assertIsNone(event["transmitter"])
         self.assertEqual(event["hit"]["codename"], "Bravo")
         self.assertEqual(event["message"], "Equipment 99 tagged Bravo")
+        self.assertIsNone(event["points"])
+        self.assertEqual(event["scoreChanges"], [])
 
     def test_tag_event_falls_back_for_two_unknown_ids(self):
         event = app.build_game_event(99, 77)
@@ -130,6 +137,8 @@ class BuildGameEventTests(EventTestBase):
         self.assertIsNone(event["transmitter"])
         self.assertIsNone(event["hit"])
         self.assertEqual(event["message"], "Equipment 99 tagged Equipment 77")
+        self.assertIsNone(event["points"])
+        self.assertEqual(event["scoreChanges"], [])
 
     def test_red_base_code_as_hit_id(self):
         event = app.build_game_event(34, app.RED_BASE_CODE)
@@ -139,7 +148,11 @@ class BuildGameEventTests(EventTestBase):
         self.assertEqual(event["transmitterEquipmentID"], 34)
         self.assertEqual(event["hitEquipmentID"], app.RED_BASE_CODE)
         self.assertEqual(event["scoringEquipmentID"], 34)
-        self.assertEqual(event["message"], "Bravo hit the red base")
+        self.assertEqual(event["message"], "Bravo hit the red base (+100)")
+        self.assertEqual(event["points"], 100)
+        self.assertEqual(event["scoreChanges"], [
+            {"playerID": 2, "codename": "Bravo", "points": 100},
+        ])
 
     def test_green_base_code_as_transmitter_id(self):
         event = app.build_game_event(app.GREEN_BASE_CODE, 12)
@@ -149,7 +162,36 @@ class BuildGameEventTests(EventTestBase):
         self.assertEqual(event["transmitterEquipmentID"], app.GREEN_BASE_CODE)
         self.assertEqual(event["hitEquipmentID"], 12)
         self.assertEqual(event["scoringEquipmentID"], 12)
-        self.assertEqual(event["message"], "Alpha hit the green base")
+        self.assertEqual(event["message"], "Alpha hit the green base (+100)")
+        self.assertEqual(event["points"], 100)
+
+    def test_invalid_base_hit_shows_no_points(self):
+        # Alpha is on the red team, so hitting the red base is not valid.
+        event = app.build_game_event(12, app.RED_BASE_CODE)
+
+        self.assertEqual(event["base"], "red")
+        self.assertEqual(event["message"], "Alpha hit the red base (no points)")
+        self.assertEqual(event["points"], 0)
+        self.assertEqual(event["scoreChanges"], [])
+
+    def test_same_team_tag_shows_negative_points_for_both(self):
+        app.gamePlayers[3] = {
+            "playerID": 3,
+            "codename": "Charlie",
+            "equipmentID": 56,
+            "team": "red",
+            "hasHitBase": False,
+        }
+        app.playerEquipment[56] = 3
+
+        event = app.build_game_event(12, 56)
+
+        self.assertEqual(event["message"], "Alpha tagged teammate Charlie (-10 each)")
+        self.assertEqual(event["points"], -10)
+        self.assertEqual(event["scoreChanges"], [
+            {"playerID": 1, "codename": "Alpha", "points": -10},
+            {"playerID": 3, "codename": "Charlie", "points": -10},
+        ])
 
     def test_scoring_hook_is_a_passthrough(self):
         event = {"type": "tag", "message": "unchanged"}
@@ -183,7 +225,8 @@ class SocketEmissionTests(EventTestBase):
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["type"], "tag")
-        self.assertEqual(events[0]["message"], "Alpha tagged Bravo")
+        self.assertEqual(events[0]["message"], "Alpha tagged Bravo (+10)")
+        self.assertIsNotNone(events[0]["timestamp"])
 
     def test_process_base_event_emits_game_event(self):
         app.process_game_event(34, app.RED_BASE_CODE)
@@ -192,7 +235,7 @@ class SocketEmissionTests(EventTestBase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["type"], "base-hit")
         self.assertEqual(events[0]["base"], "red")
-        self.assertEqual(events[0]["message"], "Bravo hit the red base")
+        self.assertEqual(events[0]["message"], "Bravo hit the red base (+100)")
 
     def test_events_do_not_change_scores_or_base_flags(self):
         app.process_game_event(12, 34)
@@ -234,8 +277,8 @@ class SocketEmissionTests(EventTestBase):
         self.assertIn("UDP receiver stopped", logs.output[0])
         events = self.get_game_events()
         self.assertEqual(len(events), 2)
-        self.assertEqual(events[0]["message"], "Alpha tagged Bravo")
-        self.assertEqual(events[1]["message"], "Bravo hit the red base")
+        self.assertEqual(events[0]["message"], "Alpha tagged Bravo (+10)")
+        self.assertEqual(events[1]["message"], "Bravo hit the red base (+100)")
 
 
 class EventResponseTests(EventTestBase):
@@ -279,6 +322,8 @@ class ClientTemplateTests(unittest.TestCase):
         self.assertIn('document.getElementById("events")', html)
         self.assertIn("events.insertBefore(eventBox, events.firstChild)", html)
         self.assertIn("events.scrollTop = 0", html)
+        self.assertIn("event.timestamp", html)
+        self.assertIn('"[" + timestamp + "] " + event.message', html)
         self.assertNotIn("socket.on('player-hit'", html)
 
     def test_game_page_loads_local_socketio_client(self):
