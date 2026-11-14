@@ -112,9 +112,18 @@
     .hidden {
       visibility: hidden;
     }
+
+    .event {
+      margin: 2px 0;
+      padding: 2px 4px;
+    }
+
+    .event-base {
+      color: #e8e27a;
+    }
   </style>
 
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="{{ url_for('static', filename='socket.io.min.js') }}"></script>
 </head>
 
 <body>
@@ -145,11 +154,24 @@
   </div>
 
   <script>
+    // Game events are produced by the server's UDP receive loop. Scoring rules
+    // are not applied yet, so this event feed only describes what happened.
     const socket = io();
-    socket.on('player-hit', data => {
-      const playerID = JSON.parse(data).playerID;
 
-    })
+    socket.on('game-event', event => {
+      if (!event || !event.message) {
+        return;
+      }
+
+      const eventBox = document.createElement("div");
+      eventBox.className = "event" + (event.type === "base-hit" ? " event-base" : "");
+      eventBox.textContent = event.message;
+
+      const events = document.getElementById("events");
+      // Newest events go at the top; older events move down the feed.
+      events.insertBefore(eventBox, events.firstChild);
+      events.scrollTop = 0;
+    });
 
     // Make one row for a player: codename on the left, score on the right
     function makePlayerRow(player) {
