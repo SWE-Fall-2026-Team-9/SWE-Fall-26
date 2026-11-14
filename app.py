@@ -21,6 +21,8 @@ scores = {}
 gamePlayers = {} # Player ID: current-game data
 playerEquipment = {} # Equipment ID: Player ID
 VALID_TEAMS = {'red', 'green'}
+RED_BASE_CODE = 53
+GREEN_BASE_CODE = 43
 MAX_PLAYERS_PER_TEAM = 15
 MAX_INTEGER_ID = 2_147_483_647
 MAX_CODENAME_LENGTH = 255
@@ -64,13 +66,113 @@ def handle_unexpected_error(error):
 	app.logger.exception('Unhandled server error')
 	return {'success': False, 'error': 'Internal server error'}, 500
 
+def find_game_player_by_equipment(equipment_id):
+	"""Return display data for the player using an equipment ID, or None."""
+	player_id = playerEquipment.get(equipment_id)
+	if player_id is None:
+		return None
+
+	game_player = gamePlayers.get(player_id)
+	if game_player is None:
+		return None
+
+	return {
+		'playerID': game_player['playerID'],
+		'codename': game_player['codename'],
+		'team': game_player['team']
+	}
+
+def describe_equipment(equipment_id):
+	"""Return a codename for an equipment ID, or a generic equipment label."""
+	game_player = find_game_player_by_equipment(equipment_id)
+	if game_player is None:
+		return f'Equipment {equipment_id}'
+	return game_player['codename']
+
+def build_game_event(transmitter_id, hit_id):
+	"""Build the client-facing event for one inbound UDP message.
+
+	This only describes what happened. Applying scoring rules is left to the
+	scoring daemon, which can extend handle_game_event().
+	"""
+	transmitter = find_game_player_by_equipment(transmitter_id)
+	hit = find_game_player_by_equipment(hit_id)
+
+	base_codes = (
+		(RED_BASE_CODE, 'red'),
+		(GREEN_BASE_CODE, 'green')
+	)
+	for base_code, base_name in base_codes:
+		if transmitter_id == base_code:
+			scoring_equipment_id = hit_id
+		elif hit_id == base_code:
+			scoring_equipment_id = transmitter_id
+		else:
+			continue
+
+		return {
+			'type': 'base-hit',
+			'base': base_name,
+			'transmitterEquipmentID': transmitter_id,
+			'hitEquipmentID': hit_id,
+			'scoringEquipmentID': scoring_equipment_id,
+			'transmitter': transmitter,
+			'hit': hit,
+			'message': f'{describe_equipment(scoring_equipment_id)} hit the {base_name} base'
+		}
+
+	return {
+		'type': 'tag',
+		'transmitterEquipmentID': transmitter_id,
+		'hitEquipmentID': hit_id,
+		'transmitter': transmitter,
+		'hit': hit,
+		'message': f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
+	}
+
+def handle_game_event(event):
+	"""Extension point for the scoring daemon.
+
+	Scoring rules are intentionally not implemented here yet. The daemon can
+	update scores/game state and extend the event before it is sent to clients.
+	"""
+	return event
+
+def send_event_response(event):
+	"""Broadcast the required UDP response for an inbound event.
+
+	The hit equipment ID is always sent. For a same-team tag, the tagging
+	equipment ID is sent as well, resulting in two transmissions.
+	"""
+	transmitter_player = event.get('transmitter')
+	hit_player = event.get('hit')
+	same_team = (
+		event.get('type') == 'tag' and
+		transmitter_player is not None and
+		hit_player is not None and
+		transmitter_player['team'] == hit_player['team']
+	)
+
+	with transmitterLock:
+		transmitter.send(event['hitEquipmentID'])
+		if same_team:
+			transmitter.send(event['transmitterEquipmentID'])
+
+def process_game_event(transmitter_id, hit_id):
+	"""Describe an inbound UDP message and broadcast it to connected clients."""
+	with stateLock:
+		event = build_game_event(transmitter_id, hit_id)
+
+	event = handle_game_event(event)
+	send_event_response(event)
+	socket.emit('game-event', event)
+	app.logger.info('Game event: %s', event['message'])
+
 def receive_messages():
 	while True:
 		try:
-			message = receiver.recv()
-
-			equipment_id = 1 # TODO: actually parse message
-			socket.emit('player-hit', {'playerID': playerEquipment[equipment_id]})
+			transmitter_id, hit_id = receiver.recv()
+			process_game_event(transmitter_id, hit_id)
 		except ValueError as error:
 			app.logger.warning('Ignored invalid UDP message: %s', error)
 		except OSError as error:
@@ -288,5 +390,10 @@ if __name__ == '__main__':
 		daemon=True
 	)
 	receiver_thread.start()
-	socket.run(app, debug=True, port=port, use_reloader=False)
-	app.run(debug=True, port=port, use_reloader=False)
+	socket.run(
+		app,
+		debug=True,
+		port=port,
+		use_reloader=False,
+		allow_unsafe_werkzeug=True
+	)

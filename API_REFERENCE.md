@@ -295,6 +295,48 @@ await fetch('/api/game/players/add', {
 });
 ```
 
+## Socket.IO game events
+
+The game page (`/game`) connects with Socket.IO and listens for `game-event`
+messages. Events are broadcast whenever the UDP receiver processes an inbound
+`<transmitterEquipmentID>:<hitEquipmentID>` message.
+
+### Tag event
+
+```json
+{
+  "type": "tag",
+  "transmitterEquipmentID": 12,
+  "hitEquipmentID": 34,
+  "transmitter": {"playerID": 1, "codename": "Alpha", "team": "red"},
+  "hit": {"playerID": 2, "codename": "Bravo", "team": "green"},
+  "message": "Alpha tagged Bravo"
+}
+```
+
+`transmitter` or `hit` is `null` when the equipment ID is not assigned to a
+current-game player, and the message falls back to `Equipment <id>`.
+
+### Base event
+
+```json
+{
+  "type": "base-hit",
+  "base": "red",
+  "transmitterEquipmentID": 34,
+  "hitEquipmentID": 53,
+  "scoringEquipmentID": 34,
+  "transmitter": {"playerID": 2, "codename": "Bravo", "team": "green"},
+  "hit": null,
+  "message": "Bravo hit the red base"
+}
+```
+
+The base code (`53` for red, `43` for green) may appear as either equipment ID;
+`scoringEquipmentID` identifies the player equipment involved. Events are
+descriptive only. Scoring rules are not applied by this event pipeline yet;
+`handle_game_event()` in `app.py` is the extension point for the scoring daemon.
+
 ## Page routes
 
 | Method | Path | Page |
