@@ -11,6 +11,7 @@ DEFAULT_DEST_ADDR = '127.0.0.1'
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 transmitter = udp.Transmitter(DEFAULT_DEST_ADDR)
 receiver = udp.Receiver()
 playerDB = db.PlayerDatabase()
@@ -226,7 +227,8 @@ def add_game_player():
 				'playerID': player_id,
 				'codename': player.codename,
 				'equipmentID': equipment_id,
-				'team': team
+				'team': team,
+				'hasHitBase': False
 			}
 			playerEquipment[equipment_id] = player_id
 			scores[player_id] = 0

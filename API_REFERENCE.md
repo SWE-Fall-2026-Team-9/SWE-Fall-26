@@ -17,7 +17,8 @@ Use relative URLs when the frontend is served by the Flask application.
 - Player and equipment IDs must be positive integers no greater than `2147483647`. Booleans and fractional values are rejected.
 - Codenames are trimmed, cannot be blank, and must contain no more than 255 characters.
 - Database players are persistent PostgreSQL records containing an ID and codename.
-- Game players are temporary roster entries containing a database player, equipment assignment, team, and score.
+- Game players are temporary roster entries containing a database player, equipment assignment, team, score, and base-hit status.
+- `hasHitBase` is a boolean on every game player object. It starts as `false` when the player is added and becomes `true` when the server processes a valid opposing-base hit. The game page displays the base icon beside the codename when it is `true`.
 - Creating a database player preserves the player ID entered by the administrator.
 
 ## Endpoint summary
@@ -150,6 +151,19 @@ Deleting a database player also removes that player from the current game.
 
 ## Game players
 
+### Game player object
+
+Every endpoint that returns a game player uses the same object shape:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `playerID` | positive integer | Persistent database player ID |
+| `codename` | string | Player's codename |
+| `equipmentID` | positive integer | Equipment assigned for this game |
+| `team` | string | `red` or `green` |
+| `score` | integer | Current game score |
+| `hasHitBase` | boolean | `true` once the player has scored on the opposing base; `false` otherwise |
+
 ### List game players
 
 ```http
@@ -165,7 +179,8 @@ GET /api/game/players
       "codename": "Alpha",
       "equipmentID": 8,
       "team": "red",
-      "score": 0
+      "score": 0,
+      "hasHitBase": false
     }
   ]
 }
@@ -196,6 +211,8 @@ Content-Type: application/json
 
 The server rejects duplicate players, duplicate equipment assignments, and teams containing more than 15 players. After validation, it broadcasts the equipment ID through UDP port `7500`.
 
+Newly added players always start with `hasHitBase` set to `false`.
+
 Successful response:
 
 ```json
@@ -206,7 +223,8 @@ Successful response:
     "codename": "Alpha",
     "equipmentID": 8,
     "team": "red",
-    "score": 0
+    "score": 0,
+    "hasHitBase": false
   }
 }
 ```

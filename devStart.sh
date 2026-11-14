@@ -1,0 +1,1 @@
+PGHOST=127.0.0.1 PGUSER=student python -m app

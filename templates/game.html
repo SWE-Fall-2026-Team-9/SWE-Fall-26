@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <title>Play Action</title>
   <style>
@@ -102,41 +103,21 @@
       border-top: 4px solid #e8e27a;
     }
 
-    .countdown-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 10;
+    .player-name-container {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      background: #000;
+      flex-direction: row;
+      gap: 10px;
     }
 
-    .countdown-screen[hidden] {
-      display: none;
+    .hidden {
+      visibility: hidden;
     }
-
-    .countdown-image {
-      width: min(90vw, 1232px);
-      max-height: 85vh;
-      object-fit: contain;
-    }
-
   </style>
 
   <script src="/socket.io/socket.io.js"></script>
 </head>
-<body>
 
-  <div class="countdown-screen" id="countdown-screen" aria-hidden="true">
-    <img
-      class="countdown-image"
-      id="countdown-image"
-      src="{{ url_for('static', filename='countdown_images/countdown30.png') }}"
-      alt=""
-    >
-  </div>
+<body>
 
   <div class="frame">
     <div class="label">Current Scores</div>
@@ -145,13 +126,13 @@
       <div class="team">
         <h2>RED TEAM</h2>
         <div class="players" id="red-players"></div>
-        <div class="total red" id="red-total">0</div>
+        <div class="total red" id="red-total">Total: 0</div>
       </div>
 
       <div class="team">
         <h2>GREEN TEAM</h2>
         <div class="players" id="green-players"></div>
-        <div class="total green" id="green-total">0</div>
+        <div class="total green" id="green-total">Total: 0</div>
       </div>
     </div>
 
@@ -175,13 +156,26 @@
       const row = document.createElement("div");
       row.className = "player " + player.team;
 
+      const playerNameContainer = document.createElement("div");
+      playerNameContainer.className = "player-name-container";
+
+      const baseIcon = document.createElement("img");
+      baseIcon.src = "{{ url_for('static', filename='baseicon.jpg') }}";
+      baseIcon.classList.add("hidden");
+      playerNameContainer.appendChild(baseIcon);
+
+      if (player.hasHitBase) {
+        baseIcon.classList.remove("hidden");
+      }
+
       const name = document.createElement("span");
       name.textContent = player.codename;
+      playerNameContainer.appendChild(name);
 
       const score = document.createElement("span");
       score.textContent = player.score;
 
-      row.appendChild(name);
+      row.appendChild(playerNameContainer);
       row.appendChild(score);
       return row;
     }
@@ -217,45 +211,13 @@
         }
       }
 
-      document.getElementById("red-total").textContent = redTotal;
-      document.getElementById("green-total").textContent = greenTotal;
+      document.getElementById("red-total").textContent = "Total: " + redTotal;
+      document.getElementById("green-total").textContent = "Total: " + greenTotal;
     }
 
     showPlayers();
     setInterval(showPlayers, 1000);
-
-    const countdownDuration = 30;
-    const countdownDurationMs = countdownDuration * 1000;
-    const countdownEnd = Date.now() + countdownDurationMs;
-    const countdownScreen = document.getElementById("countdown-screen");
-    const countdownImage = document.getElementById("countdown-image");
-    const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
-    let displayedImage = null;
-    let countdownInterval;
-
-    function updateCountdown() {
-      const remainingMs = Math.max(0, countdownEnd - Date.now());
-
-      if (remainingMs > 0) {
-        const elapsedMs = countdownDurationMs - remainingMs;
-        const imageIndex = Math.min(30, Math.floor(elapsedMs * 31 / countdownDurationMs));
-        const imageNumber = 30 - imageIndex;
-        const extension = imageNumber === 12 || imageNumber >= 15 ? "png" : "jpg";
-        const imageName = "countdown" + imageNumber + "." + extension;
-        if (displayedImage !== imageName) {
-          countdownImage.src = countdownAssetUrl + imageName;
-          displayedImage = imageName;
-        }
-      }
-
-      if (remainingMs === 0) {
-        countdownScreen.hidden = true;
-        clearInterval(countdownInterval);
-      }
-    }
-
-    updateCountdown();
-    countdownInterval = setInterval(updateCountdown, 100);
   </script>
 </body>
+
 </html>

@@ -59,6 +59,27 @@
     #message {
       color: gold;
     }
+
+    .countdown-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .countdown-screen[hidden] {
+      display: none;
+    }
+
+    .countdown-image {
+      width: min(90vw, 1232px);
+      max-height: 85vh;
+      object-fit: contain;
+    }
   </style>
 </head>
 
@@ -67,6 +88,11 @@
 
   <div id="splash">
     <img src="\static\logo.jpg" alt="Splash screen">
+  </div>
+
+  <div class="countdown-screen" id="countdown-screen" aria-hidden="true" hidden>
+    <img class="countdown-image" id="countdown-image"
+      src="{{ url_for('static', filename='countdown_images/countdown30.png') }}" alt="">
   </div>
 
   <h1>Edit Current Game</h1>
@@ -84,7 +110,7 @@
       </tr>
       {% for i in range(15) %}
       <tr>
-        <td>{{ i }}</td>
+        <td>{{ i + 1 }}</td>
         <td><input type="text" id="red-id-{{ i }}" onchange="lookUpPlayer('red', {{ i }})"></td>
         <td><input type="text" id="red-name-{{ i }}" onchange="saveNewPlayer('red', {{ i }})"></td>
         <td><input type="text" id="red-equip-{{ i }}" onchange="setEquipment('red', {{ i }})"></td>
@@ -104,7 +130,7 @@
       </tr>
       {% for i in range(15) %}
       <tr>
-        <td>{{ i }}</td>
+        <td>{{ i + 1 }}</td>
         <td><input type="text" id="green-id-{{ i }}" onchange="lookUpPlayer('green', {{ i }})"></td>
         <td><input type="text" id="green-name-{{ i }}" onchange="saveNewPlayer('green', {{ i }})"></td>
         <td><input type="text" id="green-equip-{{ i }}" onchange="setEquipment('green', {{ i }})"></td>
@@ -379,6 +405,37 @@
         showMessage("Error: " + result.error);
       }
     }
+
+    const countdownDuration = 30;
+    const countdownDurationMs = countdownDuration * 1000;
+    const countdownScreen = document.getElementById("countdown-screen");
+    const countdownImage = document.getElementById("countdown-image");
+    const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
+    let displayedImage = null;
+    let countdownInterval;
+    let countdownEnd;
+
+    function updateCountdown() {
+      const remainingMs = Math.max(0, countdownEnd - Date.now());
+
+      if (remainingMs > 0) {
+        const elapsedMs = countdownDurationMs - remainingMs;
+        const imageIndex = Math.min(30, Math.floor(elapsedMs * 31 / countdownDurationMs));
+        const imageNumber = 30 - imageIndex;
+        const extension = imageNumber === 12 || imageNumber >= 15 ? "png" : "jpg";
+        const imageName = "countdown" + imageNumber + "." + extension;
+        if (displayedImage !== imageName) {
+          countdownImage.src = countdownAssetUrl + imageName;
+          displayedImage = imageName;
+        }
+      }
+
+      if (remainingMs === 0) {
+        clearInterval(countdownInterval);
+        window.location.href = "/game";
+      }
+    }
+
     async function startGame() {
       const response = await fetch("/api/game/players");
       const result = await response.json();
@@ -387,7 +444,11 @@
         showMessage("Add at least one player with an equipment ID.");
         return;
       }
-      window.location.href = "/game";
+
+      countdownEnd = Date.now() + countdownDurationMs;
+      document.getElementById("countdown-screen").hidden = false;
+      updateCountdown();
+      countdownInterval = setInterval(updateCountdown, 100);
     }
 
     document.addEventListener("keydown", function (event) {
