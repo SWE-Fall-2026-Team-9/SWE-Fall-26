@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Testbench for the Socket.IO game-event plumbing and scoring integration.
+"""Testbench for the Socket.IO game-event plumbing and UDP receive loop.
 
 This verifies:
 
 - UDP events are described as tag/base-hit event dictionaries.
 - Events are emitted to Socket.IO clients.
-- UDP responses are sent for inbound events.
-- Scoring rules are applied from equipment IDs.
+- UDP responses are sent for every inbound event.
+- The game page signals readiness before the start signal is sent.
+- The receive loop applies the game scoring rules.
 - The game page listens for ``game-event`` and appends it to the feed.
 
 Run from the project root:
@@ -82,6 +83,7 @@ class EventTestBase(unittest.TestCase):
         app.gamePlayers.clear()
         app.playerEquipment.clear()
         app.scores.clear()
+        app.game_started = False
 
         app.gamePlayers[1] = {
             "playerID": 1,
@@ -104,6 +106,32 @@ class EventTestBase(unittest.TestCase):
 
     def tearDown(self):
         app.transmitter = self.original_transmitter
+
+
+class GameStartTests(EventTestBase):
+    def setUp(self):
+        super().setUp()
+        self.client = app.socket.test_client(app.app)
+        self.client.get_received()  # Drain the connect message.
+
+    def tearDown(self):
+        self.client.disconnect()
+        super().tearDown()
+
+    def test_game_page_does_not_start_generator(self):
+        web_client = app.app.test_client()
+
+        response = web_client.get('/game')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"socket.emit('game-ready')", response.data)
+        self.assertEqual(self.fake_transmitter.sent, [])
+
+    def test_game_ready_starts_generator_once(self):
+        self.client.emit('game-ready')
+        self.client.emit('game-ready')
+
+        self.assertEqual(self.fake_transmitter.sent, [202])
 
 
 class BuildGameEventTests(EventTestBase):
@@ -229,7 +257,7 @@ class SocketEmissionTests(EventTestBase):
         self.assertEqual(events[0]["message"], "Alpha tagged Bravo (+10)")
         self.assertTrue(any("UDP response failed" in line for line in logs.output))
 
-    def test_receive_loop_emits_events_and_applies_scoring(self):
+    def test_receive_loop_emits_events(self):
         original_receiver = app.receiver
         app.receiver = FakeReceiver([(12, 34), (34, app.RED_BASE_CODE)])
 
@@ -243,29 +271,6 @@ class SocketEmissionTests(EventTestBase):
         self.assertEqual(len(events), 2)
         self.assertEqual(events[0]["message"], "Alpha tagged Bravo (+10)")
         self.assertEqual(events[1]["message"], "Bravo hit the red base (+100)")
-        self.assertEqual(app.scores, {1: 10, 2: 100})
-        self.assertTrue(app.gamePlayers[2]["hasHitBase"])
-        self.assertEqual(self.fake_transmitter.sent, [34, app.RED_BASE_CODE])
-
-    def test_receive_loop_skips_duplicate_base_event(self):
-        original_receiver = app.receiver
-        app.receiver = FakeReceiver([(34, app.RED_BASE_CODE), (34, app.RED_BASE_CODE)])
-
-        try:
-            with self.assertLogs("app", level="ERROR"):
-                app.receive_messages()
-        finally:
-            app.receiver = original_receiver
-
-        events = self.get_game_events()
-        self.assertEqual(len(events), 1)
-        self.assertEqual(events[0]["message"], "Bravo hit the red base (+100)")
-        self.assertEqual(app.scores[2], 100)
-        self.assertTrue(app.gamePlayers[2]["hasHitBase"])
-        self.assertEqual(
-            self.fake_transmitter.sent,
-            [app.RED_BASE_CODE, app.RED_BASE_CODE],
-        )
 
     def test_base_event_not_emitted_after_has_hit_base(self):
         app.gamePlayers[2]["hasHitBase"] = True
@@ -334,45 +339,118 @@ class EventResponseTests(EventTestBase):
         )
 
 
-class ScoringTests(EventTestBase):
-    def test_opposing_tag_awards_tagger(self):
-        app.apply_scoring_event(12, 34)
+class ScoringLoopTests(EventTestBase):
+    """Exercise the scoring rules owned by ``receive_messages``.
 
-        self.assertEqual(app.scores, {1: 10, 2: 0})
+    The scoring loop indexes ``gamePlayers`` and ``scores`` with the IDs that
+    the UDP receiver returns, so these tests align player IDs with equipment
+    IDs. Event construction is covered separately with equipment IDs.
+    """
 
-    def test_friendly_fire_subtracts_both_players(self):
-        app.gamePlayers[3] = {
-            "playerID": 3,
+    def setUp(self):
+        super().setUp()
+        app.gamePlayers.clear()
+        app.playerEquipment.clear()
+        app.scores.clear()
+        app.game_started = False
+
+        app.gamePlayers[12] = {
+            "playerID": 12,
+            "codename": "Alpha",
+            "equipmentID": 12,
+            "team": "red",
+            "hasHitBase": False,
+        }
+        app.gamePlayers[34] = {
+            "playerID": 34,
+            "codename": "Bravo",
+            "equipmentID": 34,
+            "team": "green",
+            "hasHitBase": False,
+        }
+        app.playerEquipment[12] = 12
+        app.playerEquipment[34] = 34
+        app.scores[12] = 0
+        app.scores[34] = 0
+
+        self.client = app.socket.test_client(app.app)
+        self.client.get_received()  # Drain the connect message.
+
+    def tearDown(self):
+        self.client.disconnect()
+        super().tearDown()
+
+    def get_game_events(self):
+        return [
+            message["args"][0]
+            for message in self.client.get_received()
+            if message["name"] == "game-event"
+        ]
+
+    def run_loop(self, messages):
+        original_receiver = app.receiver
+        app.receiver = FakeReceiver(messages)
+
+        try:
+            with self.assertLogs("app", level="ERROR"):
+                app.receive_messages()
+        finally:
+            app.receiver = original_receiver
+
+    def test_receive_loop_applies_scoring_rules(self):
+        self.run_loop([(12, 34), (34, app.RED_BASE_CODE)])
+
+        events = self.get_game_events()
+        self.assertEqual(len(events), 2)
+        self.assertEqual(events[0]["message"], "Alpha tagged Bravo (+10)")
+        self.assertEqual(events[1]["message"], "Bravo hit the red base (+100)")
+        self.assertEqual(app.scores, {12: 10, 34: 100})
+        self.assertTrue(app.gamePlayers[34]["hasHitBase"])
+        self.assertEqual(
+            self.fake_transmitter.sent,
+            [34, app.RED_BASE_CODE],
+        )
+
+    def test_receive_loop_skips_duplicate_base_event(self):
+        self.run_loop([(34, app.RED_BASE_CODE), (34, app.RED_BASE_CODE)])
+
+        events = self.get_game_events()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["message"], "Bravo hit the red base (+100)")
+        self.assertEqual(app.scores[34], 100)
+        self.assertTrue(app.gamePlayers[34]["hasHitBase"])
+        # Base hits get a reply for every inbound message, even when the
+        # play-by-play event is suppressed.
+        self.assertEqual(
+            self.fake_transmitter.sent,
+            [app.RED_BASE_CODE, app.RED_BASE_CODE],
+        )
+
+    def test_receive_loop_subtracts_for_friendly_fire(self):
+        app.gamePlayers[56] = {
+            "playerID": 56,
             "codename": "Charlie",
             "equipmentID": 56,
             "team": "red",
             "hasHitBase": False,
         }
-        app.playerEquipment[56] = 3
-        app.scores[3] = 0
+        app.playerEquipment[56] = 56
+        app.scores[56] = 0
 
-        app.apply_scoring_event(12, 56)
+        self.run_loop([(12, 56)])
 
-        self.assertEqual(app.scores, {1: -10, 2: 0, 3: -10})
-
-    def test_valid_base_hit_awards_once_per_player(self):
-        app.apply_scoring_event(34, app.RED_BASE_CODE)
-        app.apply_scoring_event(34, app.RED_BASE_CODE)
-
-        self.assertEqual(app.scores[2], 100)
-        self.assertTrue(app.gamePlayers[2]["hasHitBase"])
-
-    def test_base_code_as_transmitter_still_awards_player(self):
-        app.apply_scoring_event(app.RED_BASE_CODE, 34)
-
-        self.assertEqual(app.scores[2], 100)
-        self.assertTrue(app.gamePlayers[2]["hasHitBase"])
+        self.assertEqual(app.scores, {12: -10, 34: 0, 56: -10})
+        self.assertEqual(self.fake_transmitter.sent, [56, 12])
 
     def test_invalid_base_hit_does_not_award_points(self):
-        app.apply_scoring_event(12, app.RED_BASE_CODE)
+        self.run_loop([(12, app.RED_BASE_CODE)])
 
-        self.assertEqual(app.scores[1], 0)
-        self.assertFalse(app.gamePlayers[1]["hasHitBase"])
+        self.assertEqual(app.scores[12], 0)
+        self.assertFalse(app.gamePlayers[12]["hasHitBase"])
+        self.assertEqual(self.fake_transmitter.sent, [app.RED_BASE_CODE])
+        events = self.get_game_events()
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["message"], "Alpha hit the red base (no points)")
 
 
 class ClientTemplateTests(unittest.TestCase):
@@ -386,6 +464,7 @@ class ClientTemplateTests(unittest.TestCase):
         self.assertIn("events.scrollTop = 0", html)
         self.assertIn("event.timestamp", html)
         self.assertIn('"[" + timestamp + "] " + event.message', html)
+        self.assertIn("socket.emit('game-ready')", html)
         self.assertNotIn("socket.on('player-hit'", html)
 
     def test_game_page_loads_local_socketio_client(self):

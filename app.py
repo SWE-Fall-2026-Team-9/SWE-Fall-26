@@ -31,6 +31,19 @@ MAX_INTEGER_ID = 2_147_483_647
 MAX_CODENAME_LENGTH = 255
 stateLock = threading.RLock()
 transmitterLock = threading.Lock()
+game_started = False
+
+@socket.on('game-ready')
+def handle_game_ready():
+	"""Start the traffic generator once the game page can receive events."""
+	global game_started
+	with stateLock:
+		if game_started:
+			return
+		game_started = True
+
+	with transmitterLock:
+		transmitter.send(202)
 
 def parse_positive_integer(data, field_name):
 	value = data.get(field_name)
@@ -152,7 +165,7 @@ def build_game_event(transmitter_id, hit_id):
 	}
 
 def process_game_event(transmitter_id, hit_id):
-	"""Describe an inbound UDP message and broadcast it to connected clients."""
+	"""Describe an inbound UDP message, reply over UDP, and broadcast it."""
 	with stateLock:
 		event = build_game_event(transmitter_id, hit_id)
 		base_hit = find_base_hit(transmitter_id, hit_id)
@@ -195,43 +208,42 @@ def send_event_response(event):
 			transmitter.send(event['transmitterEquipmentID'])
 
 
-def apply_scoring_event(transmitter_id, hit_id):
-	with stateLock:
-		base_hit = find_base_hit(transmitter_id, hit_id)
-		if base_hit is not None:
-			_, rewarded_team, player_equipment_id = base_hit
-			player_id = playerEquipment.get(player_equipment_id)
-			player = gamePlayers.get(player_id)
-			if player is not None and player['team'] == rewarded_team and not player['hasHitBase']:
-				scores[player_id] += 100
-				player['hasHitBase'] = True
-			return
-
-		transmitter_player_id = playerEquipment.get(transmitter_id)
-		hit_player_id = playerEquipment.get(hit_id)
-		transmitter_player = gamePlayers.get(transmitter_player_id)
-		hit_player = gamePlayers.get(hit_player_id)
-		if transmitter_player is None or hit_player is None:
-			return
-
-		if transmitter_player['team'] != hit_player['team']:
-			scores[transmitter_player_id] += 10
-		else:
-			scores[transmitter_player_id] -= 10
-			scores[hit_player_id] -= 10
-
 def receive_messages():
 	while True:
 		try:
-			transmitter_id, hit_id = receiver.recv()
-			process_game_event(transmitter_id, hit_id)
-			apply_scoring_event(transmitter_id, hit_id)
+			scored_id, tagged_id = receiver.recv()
+			# Emit the play-by-play event before the scoring rules below update
+			# hasHitBase, so a repeated base hit is not shown in the feed.
+			process_game_event(scored_id, tagged_id)
+
+			with stateLock:
+				player = gamePlayers[scored_id]
+
+				# Team check may be unnecessary:
+				green_scored = tagged_id == 53 and player['team'] == 'green'
+				red_scored = tagged_id == 43 and player['team'] == 'red'
+
+				# Base has been scored
+				# Flag check is technically unnecessary:
+				if (green_scored or red_scored) and not player['hasHitBase']:
+					scores[scored_id] += 100
+					# Set base flag:
+					player['hasHitBase'] = True
+					continue
+
+				tagged = gamePlayers[tagged_id]
+
+				if player['team'] != tagged['team']:
+					scores[scored_id] += 10
+				else:
+					scores[scored_id] -= 10
+					scores[tagged_id] -= 10
 		except ValueError as error:
-			app.logger.warning(f'Ignored invalid UDP message: {error}')
+			app.logger.warning('Ignored invalid UDP message: %s', error)
 		except KeyError as error:
-			app.logger.warning(f'Invalid ID supplied: {error}')
+			app.logger.warning('Invalid ID supplied: %s', error)
 		except OSError as error:
-			app.logger.error(f'UDP receiver stopped: {error}')
+			app.logger.error('UDP receiver stopped: %s', error)
 			break
 		except Exception:
 			app.logger.exception('Unexpected UDP receiver error')
@@ -242,7 +254,6 @@ def home():
 
 @app.route('/game')
 def game():
-	transmitter.send(202)
 	return render_template('game.html')
 
 @app.route('/api/database/status', methods=['GET'])

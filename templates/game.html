@@ -238,6 +238,11 @@
 
     showPlayers();
     setInterval(showPlayers, 1000);
+
+    // Tell the server we are ready after the event feed is wired up. This
+    // prevents the traffic generator from starting before we can receive
+    // game-event messages.
+    socket.emit('game-ready');
   </script>
 </body>
 
