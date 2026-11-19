@@ -67,6 +67,6 @@ Run the Socket.IO game-event testbench:
 python tests/test_game_events.py
 ```
 
-This verifies the event-foundation code only (tag/base event construction,
-Socket.IO emission, the UDP receive loop, UDP responses, and the game-page event
-feed). It does not test scoring rules.
+This verifies the event and scoring integration (tag/base event construction,
+Socket.IO emission, the UDP receive loop, UDP responses, scoring updates, and the
+game-page event feed).

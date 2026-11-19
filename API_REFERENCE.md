@@ -340,8 +340,10 @@ score state are owned by the scoring daemon. A same-team tag shows
 
 The base code (`53` for red, `43` for green) may appear as either equipment ID.
 The message shows `(+100)` for a valid opposing-base hit and `(no points)`
-otherwise. These point changes are display text only. Base events do not modify
-`hasHitBase`; once-per-player base eligibility is owned by the scoring daemon.
+otherwise. These point changes are display text only. The scoring daemon owns
+`hasHitBase`; the event pipeline reads that flag and does not emit another base
+event after the player has already hit the base. UDP responses are still sent for
+each inbound event.
 
 Events are descriptive only. This pipeline does not apply or expose scoring
 rules, and it does not define a scoring interface for other code to implement.

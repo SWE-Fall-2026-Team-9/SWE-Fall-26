@@ -68,6 +68,14 @@ while True:
 			message = str(redplayer) + ":43"
 	if counter == 40:
 		message = str(greenplayer) + ":53"
+	if counter == 50:
+			message = str(redplayer) + ":43"
+	if counter == 60:
+		message = str(greenplayer) + ":53"
+	if counter == 70:
+			message = str(redplayer) + ":43"
+	if counter == 80:
+		message = str(greenplayer) + ":53"
 		
 	print(f"transmitting event {counter} to game: " + message)
 	

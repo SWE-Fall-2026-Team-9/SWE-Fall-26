@@ -5,7 +5,6 @@ from modules import db, udp
 import ipaddress
 import threading
 import time
-import time
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from psycopg import OperationalError
 
@@ -156,11 +155,21 @@ def process_game_event(transmitter_id, hit_id):
 	"""Describe an inbound UDP message and broadcast it to connected clients."""
 	with stateLock:
 		event = build_game_event(transmitter_id, hit_id)
+		base_hit = find_base_hit(transmitter_id, hit_id)
+		base_already_hit = False
+		if base_hit is not None:
+			_, _, player_equipment_id = base_hit
+			player_id = playerEquipment.get(player_equipment_id)
+			game_player = gamePlayers.get(player_id)
+			base_already_hit = game_player is not None and game_player.get('hasHitBase', False)
 
 	try:
 		send_event_response(event)
 	except OSError as error:
 		app.logger.warning(f'UDP response failed: {error}')
+
+	if base_already_hit:
+		return
 
 	socket.emit('game-event', event)
 	app.logger.info(f'Game event [{event["timestamp"]}]: {event["message"]}')
@@ -185,160 +194,44 @@ def send_event_response(event):
 		if same_team:
 			transmitter.send(event['transmitterEquipmentID'])
 
-def find_game_player_by_equipment(equipment_id):
-	"""Return display data for the player using an equipment ID, or None."""
-	player_id = playerEquipment.get(equipment_id)
-	if player_id is None:
-		return None
 
-	game_player = gamePlayers.get(player_id)
-	if game_player is None:
-		return None
-
-	return {
-		'playerID': game_player['playerID'],
-		'codename': game_player['codename'],
-		'team': game_player['team']
-	}
-
-def describe_equipment(equipment_id):
-	"""Return a codename for an equipment ID, or a generic equipment label."""
-	game_player = find_game_player_by_equipment(equipment_id)
-	if game_player is None:
-		return f'Equipment {equipment_id}'
-	return game_player['codename']
-
-def find_base_hit(transmitter_id, hit_id):
-	"""Return the base name, rewarded team, and player equipment ID for a base event."""
-	base_codes = (
-		(RED_BASE_CODE, 'red', 'green'),
-		(GREEN_BASE_CODE, 'green', 'red')
-	)
-	for base_code, base_name, rewarded_team in base_codes:
-		if transmitter_id == base_code:
-			return base_name, rewarded_team, hit_id
-		if hit_id == base_code:
-			return base_name, rewarded_team, transmitter_id
-	return None
-
-def build_game_event(transmitter_id, hit_id):
-	"""Build the client-facing event for one inbound UDP message."""
-	transmitter = find_game_player_by_equipment(transmitter_id)
-	hit = find_game_player_by_equipment(hit_id)
-	timestamp = time.strftime('%H:%M:%S')
-
-	base_hit = find_base_hit(transmitter_id, hit_id)
-	if base_hit is not None:
-		base_name, rewarded_team, player_equipment_id = base_hit
-		player = find_game_player_by_equipment(player_equipment_id)
-		point_text = ''
-		if player is not None:
-			if player['team'] == rewarded_team:
-				point_text = ' (+100)'
-			else:
-				point_text = ' (no points)'
-
-		return {
-			'type': 'base-hit',
-			'base': base_name,
-			'transmitterEquipmentID': transmitter_id,
-			'hitEquipmentID': hit_id,
-			'transmitter': transmitter,
-			'hit': hit,
-			'timestamp': timestamp,
-			'message': f'{describe_equipment(player_equipment_id)} hit the {base_name} base{point_text}'
-		}
-
-	if transmitter is not None and hit is not None:
-		if transmitter['team'] == hit['team']:
-			message = f'{transmitter["codename"]} tagged teammate {hit["codename"]} (-10 each)'
-		else:
-			message = f'{transmitter["codename"]} tagged {hit["codename"]} (+10)'
-	else:
-		message = f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
-
-	return {
-		'type': 'tag',
-		'transmitterEquipmentID': transmitter_id,
-		'hitEquipmentID': hit_id,
-		'transmitter': transmitter,
-		'hit': hit,
-		'timestamp': timestamp,
-		'message': message
-	}
-
-def process_game_event(transmitter_id, hit_id):
-	"""Describe an inbound UDP message and broadcast it to connected clients."""
+def apply_scoring_event(transmitter_id, hit_id):
 	with stateLock:
-		event = build_game_event(transmitter_id, hit_id)
+		base_hit = find_base_hit(transmitter_id, hit_id)
+		if base_hit is not None:
+			_, rewarded_team, player_equipment_id = base_hit
+			player_id = playerEquipment.get(player_equipment_id)
+			player = gamePlayers.get(player_id)
+			if player is not None and player['team'] == rewarded_team and not player['hasHitBase']:
+				scores[player_id] += 100
+				player['hasHitBase'] = True
+			return
 
-	try:
-		send_event_response(event)
-	except OSError as error:
-		app.logger.warning(f'UDP response failed: {error}')
+		transmitter_player_id = playerEquipment.get(transmitter_id)
+		hit_player_id = playerEquipment.get(hit_id)
+		transmitter_player = gamePlayers.get(transmitter_player_id)
+		hit_player = gamePlayers.get(hit_player_id)
+		if transmitter_player is None or hit_player is None:
+			return
 
-	socket.emit('game-event', event)
-	app.logger.info(f'Game event [{event["timestamp"]}]: {event["message"]}')
-
-def send_event_response(event):
-	"""Broadcast the required UDP response for an inbound event.
-
-	The hit equipment ID is always sent. For a same-team tag, the tagging
-	equipment ID is sent as well, resulting in two transmissions.
-	"""
-	transmitter_player = event.get('transmitter')
-	hit_player = event.get('hit')
-	same_team = (
-		event.get('type') == 'tag' and
-		transmitter_player is not None and
-		hit_player is not None and
-		transmitter_player['team'] == hit_player['team']
-	)
-
-	with transmitterLock:
-		transmitter.send(event['hitEquipmentID'])
-		if same_team:
-			transmitter.send(event['transmitterEquipmentID'])
+		if transmitter_player['team'] != hit_player['team']:
+			scores[transmitter_player_id] += 10
+		else:
+			scores[transmitter_player_id] -= 10
+			scores[hit_player_id] -= 10
 
 def receive_messages():
 	while True:
 		try:
-			scored_id, tagged_id = receiver.recv()
-
-			with stateLock:
-				player = gamePlayers[scored_id]
-
-				# Team check may be unnecessary:
-				green_scored = tagged_id == 53 and player['team'] == 'green'
-				red_scored = tagged_id == 43 and player['team'] == 'red'
-
-				# Base has been scored
-				# Flag check is technically unnecessary:
-				if (green_scored or red_scored) and not player['hasHitBase']:
-					scores[scored_id] += 100
-					# Set base flag:
-					player['hasHitBase'] = True
-					continue
-
-				tagged = gamePlayers[tagged_id]
-				tagged_ids  = [tagged_id]
-
-				if player['team'] != tagged['team']:
-					scores[scored_id] += 10
-				else:
-					scores[scored_id] -= 10
-					scores[tagged_id] -= 10
-					tagged_ids.append(scored_id)
-
-				with transmitterLock:
-					for id in tagged_ids:
-						transmitter.send(id)
+			transmitter_id, hit_id = receiver.recv()
+			process_game_event(transmitter_id, hit_id)
+			apply_scoring_event(transmitter_id, hit_id)
 		except ValueError as error:
-			app.logger.warning('Ignored invalid UDP message: %s', error)
+			app.logger.warning(f'Ignored invalid UDP message: {error}')
 		except KeyError as error:
-			app.logger.warning('Invalid ID supplied: %s', error)
+			app.logger.warning(f'Invalid ID supplied: {error}')
 		except OSError as error:
-			app.logger.error('UDP receiver stopped: %s', error)
+			app.logger.error(f'UDP receiver stopped: {error}')
 			break
 		except Exception:
 			app.logger.exception('Unexpected UDP receiver error')
