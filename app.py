@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+import logging
 from modules import db, udp
 import ipaddress
 import threading
@@ -9,10 +10,11 @@ port = 8000
 DEFAULT_DEST_ADDR = '127.0.0.1'
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-transmitter = udp.Transmitter(DEFAULT_DEST_ADDR)
-receiver = udp.Receiver()
+transmitter = udp.Transmitter(DEFAULT_DEST_ADDR, app.logger)
+receiver = udp.Receiver(app.logger)
 playerDB = db.PlayerDatabase()
 
 scores = {}
@@ -65,10 +67,40 @@ def handle_unexpected_error(error):
 def receive_messages():
 	while True:
 		try:
-			message = receiver.recv()
-			# TODO: Process the received message.
+			scored_id, tagged_id = receiver.recv()
+
+			with stateLock:
+				player = gamePlayers[scored_id]
+
+				# Team check may be unnecessary:
+				green_scored = tagged_id == 53 and player['team'] == 'green'
+				red_scored = tagged_id == 43 and player['team'] == 'red'
+
+				# Base has been scored
+				# Flag check is technically unnecessary:
+				if (green_scored or red_scored) and not player['hasHitBase']:
+					scores[scored_id] += 100
+					# Set base flag:
+					player['hasHitBase'] = True
+					continue
+
+				tagged = gamePlayers[tagged_id]
+				tagged_ids  = [tagged_id]
+
+				if player['team'] != tagged['team']:
+					scores[scored_id] += 10
+				else:
+					scores[scored_id] -= 10
+					scores[tagged_id] -= 10
+					tagged_ids.append(scored_id)
+
+				with transmitterLock:
+					for id in tagged_ids:
+						transmitter.send(id)
 		except ValueError as error:
 			app.logger.warning('Ignored invalid UDP message: %s', error)
+		except KeyError as error:
+			app.logger.warning('Invalid ID supplied: %s', error)
 		except OSError as error:
 			app.logger.error('UDP receiver stopped: %s', error)
 			break

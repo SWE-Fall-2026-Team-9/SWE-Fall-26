@@ -3,21 +3,25 @@ import socket
 class Transmitter:
     PORT = 7500
 
-    def __init__(self, ip = "127.0.0.1"):
+    def __init__(self, ip, logger = None):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.ip = ip
+        self.logger = logger
 
         # Allow broadcasting
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
-        print(f"Broadcasting to {self.ip}: {Transmitter.PORT}")
+        if self.logger is not None:
+            self.logger.info("Broadcasting to %s: %d", self.ip, Transmitter.PORT)
 
     def send(self, tagged_id):
         message = f"{tagged_id}"
         # Format is a single integer; ASCII is sufficient
         bytes = message.encode("ascii", errors = "replace") + b'\x00'
         self.sock.sendto(bytes, (self.ip, Transmitter.PORT))
-        print(f"Sent UDP on {self.ip}: {message}")
+
+        if self.logger is not None:
+            self.logger.info("Sent UDP on %s: %s", self.ip, message)
 
     def close(self):
         self.sock.close()
@@ -27,21 +31,25 @@ class Receiver:
     HOST_PORT = 7501
     BUFFER_SIZE = 4096
 
-    def __init__(self):
+    def __init__(self, logger = None):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.logger = logger
 
         # Allow quick restart of the program
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         # Bind to specified port
         self.sock.bind((Receiver.HOST, Receiver.HOST_PORT))
 
-        print(f"Listening from {Receiver.HOST}: {Receiver.HOST_PORT}")
+        if self.logger is not None:
+            self.logger.info("Listening from %s: %d", Receiver.HOST, Receiver.HOST_PORT)
 
     def recv(self):
         bytes, addr  = self.sock.recvfrom(Receiver.BUFFER_SIZE)
         # Format is of integers and ':'; ASCII is sufficient
         message = bytes.rstrip(b'\x00').decode("ascii", errors = "replace")
-        print(f"Received UDP from {addr}: {message}")
+
+        if self.logger is not None:
+            self.logger.info("Received UDP from %s: %s", addr, message)
 
         scored_id, sep, tagged_id = message.partition(":")
 
