@@ -18,7 +18,7 @@ Use relative URLs when the frontend is served by the Flask application.
 - Codenames are trimmed, cannot be blank, and must contain no more than 255 characters.
 - Database players are persistent PostgreSQL records containing an ID and codename.
 - Game players are temporary roster entries containing a database player, equipment assignment, team, score, and base-hit status.
-- `hasHitBase` is a boolean on every game player object. It starts as `false` when the player is added and becomes `true` when the server processes a valid opposing-base hit. The game page displays the base icon beside the codename when it is `true`.
+- `hasHitBase` is a boolean on every game player object. It starts as `false` when the player is added and is updated by the scoring daemon when it processes a valid opposing-base hit. The game event pipeline does not modify it. The game page displays the base icon beside the codename when it is `true`.
 - Creating a database player preserves the player ID entered by the administrator.
 
 ## Endpoint summary
@@ -311,10 +311,6 @@ messages. Events are broadcast whenever the UDP receiver processes an inbound
   "transmitter": {"playerID": 1, "codename": "Alpha", "team": "red"},
   "hit": {"playerID": 2, "codename": "Bravo", "team": "green"},
   "timestamp": "14:32:07",
-  "points": 10,
-  "scoreChanges": [
-    {"playerID": 1, "codename": "Alpha", "points": 10}
-  ],
   "message": "Alpha tagged Bravo (+10)"
 }
 ```
@@ -322,9 +318,9 @@ messages. Events are broadcast whenever the UDP receiver processes an inbound
 `transmitter` or `hit` is `null` when the equipment ID is not assigned to a
 current-game player, and the message falls back to `Equipment <id>`.
 
-`points` and `scoreChanges` describe the expected score change for display.
-They are not applied to the server's score state; the scoring daemon owns that
-logic. A same-team tag reports `-10` for both players and shows
+The `message` text includes the expected point change for the play-by-play feed
+only. Events carry no scoring fields and do not change scores; scoring rules and
+score state are owned by the scoring daemon. A same-team tag shows
 `Alpha tagged teammate Charlie (-10 each)`.
 
 ### Base event
@@ -335,26 +331,20 @@ logic. A same-team tag reports `-10` for both players and shows
   "base": "red",
   "transmitterEquipmentID": 34,
   "hitEquipmentID": 53,
-  "scoringEquipmentID": 34,
   "transmitter": {"playerID": 2, "codename": "Bravo", "team": "green"},
   "hit": null,
   "timestamp": "14:32:19",
-  "points": 100,
-  "scoreChanges": [
-    {"playerID": 2, "codename": "Bravo", "points": 100}
-  ],
   "message": "Bravo hit the red base (+100)"
 }
 ```
 
-The base code (`53` for red, `43` for green) may appear as either equipment ID;
-`scoringEquipmentID` identifies the player equipment involved. A valid
-opposing-base hit reports `points: 100`; an invalid base hit reports
-`points: 0` and a `(no points)` message.
+The base code (`53` for red, `43` for green) may appear as either equipment ID.
+The message shows `(+100)` for a valid opposing-base hit and `(no points)`
+otherwise. These point changes are display text only. Base events do not modify
+`hasHitBase`; once-per-player base eligibility is owned by the scoring daemon.
 
-Events are descriptive only. Scoring rules are not applied by this event
-pipeline yet; `handle_game_event()` in `app.py` is the extension point for the
-scoring daemon.
+Events are descriptive only. This pipeline does not apply or expose scoring
+rules, and it does not define a scoring interface for other code to implement.
 
 For every inbound event, the server broadcasts the hit equipment ID back to the
 UDP destination on port `7500`. A same-team tag also broadcasts the tagging
