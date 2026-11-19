@@ -5,6 +5,7 @@ from modules import db, udp
 import ipaddress
 import threading
 import time
+import time
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from psycopg import OperationalError
 
@@ -68,6 +69,121 @@ def handle_http_error(error):
 def handle_unexpected_error(error):
 	app.logger.exception('Unhandled server error')
 	return {'success': False, 'error': 'Internal server error'}, 500
+
+def find_game_player_by_equipment(equipment_id):
+	"""Return display data for the player using an equipment ID, or None."""
+	player_id = playerEquipment.get(equipment_id)
+	if player_id is None:
+		return None
+
+	game_player = gamePlayers.get(player_id)
+	if game_player is None:
+		return None
+
+	return {
+		'playerID': game_player['playerID'],
+		'codename': game_player['codename'],
+		'team': game_player['team']
+	}
+
+def describe_equipment(equipment_id):
+	"""Return a codename for an equipment ID, or a generic equipment label."""
+	game_player = find_game_player_by_equipment(equipment_id)
+	if game_player is None:
+		return f'Equipment {equipment_id}'
+	return game_player['codename']
+
+def find_base_hit(transmitter_id, hit_id):
+	"""Return the base name, rewarded team, and player equipment ID for a base event."""
+	base_codes = (
+		(RED_BASE_CODE, 'red', 'green'),
+		(GREEN_BASE_CODE, 'green', 'red')
+	)
+	for base_code, base_name, rewarded_team in base_codes:
+		if transmitter_id == base_code:
+			return base_name, rewarded_team, hit_id
+		if hit_id == base_code:
+			return base_name, rewarded_team, transmitter_id
+	return None
+
+def build_game_event(transmitter_id, hit_id):
+	"""Build the client-facing event for one inbound UDP message."""
+	transmitter = find_game_player_by_equipment(transmitter_id)
+	hit = find_game_player_by_equipment(hit_id)
+	timestamp = time.strftime('%H:%M:%S')
+
+	base_hit = find_base_hit(transmitter_id, hit_id)
+	if base_hit is not None:
+		base_name, rewarded_team, player_equipment_id = base_hit
+		player = find_game_player_by_equipment(player_equipment_id)
+		point_text = ''
+		if player is not None:
+			if player['team'] == rewarded_team:
+				point_text = ' (+100)'
+			else:
+				point_text = ' (no points)'
+
+		return {
+			'type': 'base-hit',
+			'base': base_name,
+			'transmitterEquipmentID': transmitter_id,
+			'hitEquipmentID': hit_id,
+			'transmitter': transmitter,
+			'hit': hit,
+			'timestamp': timestamp,
+			'message': f'{describe_equipment(player_equipment_id)} hit the {base_name} base{point_text}'
+		}
+
+	if transmitter is not None and hit is not None:
+		if transmitter['team'] == hit['team']:
+			message = f'{transmitter["codename"]} tagged teammate {hit["codename"]} (-10 each)'
+		else:
+			message = f'{transmitter["codename"]} tagged {hit["codename"]} (+10)'
+	else:
+		message = f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
+
+	return {
+		'type': 'tag',
+		'transmitterEquipmentID': transmitter_id,
+		'hitEquipmentID': hit_id,
+		'transmitter': transmitter,
+		'hit': hit,
+		'timestamp': timestamp,
+		'message': message
+	}
+
+def process_game_event(transmitter_id, hit_id):
+	"""Describe an inbound UDP message and broadcast it to connected clients."""
+	with stateLock:
+		event = build_game_event(transmitter_id, hit_id)
+
+	try:
+		send_event_response(event)
+	except OSError as error:
+		app.logger.warning(f'UDP response failed: {error}')
+
+	socket.emit('game-event', event)
+	app.logger.info(f'Game event [{event["timestamp"]}]: {event["message"]}')
+
+def send_event_response(event):
+	"""Broadcast the required UDP response for an inbound event.
+
+	The hit equipment ID is always sent. For a same-team tag, the tagging
+	equipment ID is sent as well, resulting in two transmissions.
+	"""
+	transmitter_player = event.get('transmitter')
+	hit_player = event.get('hit')
+	same_team = (
+		event.get('type') == 'tag' and
+		transmitter_player is not None and
+		hit_player is not None and
+		transmitter_player['team'] == hit_player['team']
+	)
+
+	with transmitterLock:
+		transmitter.send(event['hitEquipmentID'])
+		if same_team:
+			transmitter.send(event['transmitterEquipmentID'])
 
 def find_game_player_by_equipment(equipment_id):
 	"""Return display data for the player using an equipment ID, or None."""
