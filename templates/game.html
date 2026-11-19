@@ -209,6 +209,56 @@
 
     showPlayers();
     setInterval(showPlayers, 1000);
+    
+    const secondsAtLoad = Number("{{ seconds_left | default(360) }}");
+    const endTime = Date.now() + secondsAtLoad * 1000;
+    let gameEnded = false;
+
+    function formatTime(totalSeconds) {
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return minutes + ":" + String(seconds).padStart(2, "0");
+    }
+
+    async function endGame() {
+      if (gameEnded) {
+        return;
+      }
+      gameEnded = true;
+      clearInterval(timerInterval);
+      document.getElementById("time").textContent = "0:00";
+
+      try {
+        const response = await fetch("/api/game/end", { method: "POST" });
+        const result = await response.json();
+        if (!result.success) {
+          console.error("Could not end game:", result.error);
+        }
+      } catch (error) {
+        console.error("Could not end game:", error);
+      }
+
+      // One last refresh so the final scores are shown, then stop polling
+      await showPlayers();
+      clearInterval(playersInterval);
+
+      const done = document.createElement("div");
+      done.textContent = "GAME OVER";
+      document.getElementById("events").appendChild(done);
+    }
+
+    function updateTimer() {
+      // Work from the real clock, so the timer doesn't drift
+      const secondsLeft = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+      document.getElementById("time").textContent = formatTime(secondsLeft);
+      if (secondsLeft <= 0) {
+        endGame();
+      }
+    }
+
+    const timerInterval = setInterval(updateTimer, 250);
+    updateTimer();
+
   </script>
 </body>
 

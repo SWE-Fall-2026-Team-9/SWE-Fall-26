@@ -1,3 +1,5 @@
+import time
+
 from flask import Flask, render_template, request
 import logging
 from modules import db, udp
@@ -26,6 +28,10 @@ MAX_INTEGER_ID = 2_147_483_647
 MAX_CODENAME_LENGTH = 255
 stateLock = threading.RLock()
 transmitterLock = threading.Lock()
+GAME_DURATION_SECONDS = 6 * 60
+gameEndTime = None 
+gameOver = False
+
 
 def parse_positive_integer(data, field_name):
 	value = data.get(field_name)
@@ -113,8 +119,29 @@ def home():
 
 @app.route('/game')
 def game():
+	global gameEndTime, gameOver
+	with stateLock:
+		if gameEndTime is None or gameOver:
+			gameEndTime = time.monotonic() + GAME_DURATION_SECONDS
+			gameOver = False
+		seconds_left = max(0, int(round(gameEndTime - time.monotonic())))
+
 	transmitter.send(202)
 	return render_template('game.html')
+
+@app.route('/api/game/end', methods=['POST'])
+def end_game():
+	global gameOver
+	with stateLock:
+		if gameOver:
+			return {'success': True, 'message': 'Game already ended.'}
+		gameOver = True
+
+	with transmitterLock:
+		for _ in range(3):
+			transmitter.send(221)
+	app.logger.info('Game ended')
+	return {'success': True, 'message': 'Game ended.'}
 
 @app.route('/api/database/status', methods=['GET'])
 def get_database_status():
