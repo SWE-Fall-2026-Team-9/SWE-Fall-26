@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request
+import logging
 from modules import db, udp
 import ipaddress
 import threading
@@ -9,10 +10,11 @@ port = 8000
 DEFAULT_DEST_ADDR = '127.0.0.1'
 
 app = Flask(__name__)
+app.logger.setLevel(logging.INFO)
 app.config['MAX_CONTENT_LENGTH'] = 64 * 1024
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-transmitter = udp.Transmitter(DEFAULT_DEST_ADDR)
-receiver = udp.Receiver()
+transmitter = udp.Transmitter(DEFAULT_DEST_ADDR, app.logger)
+receiver = udp.Receiver(app.logger)
 playerDB = db.PlayerDatabase()
 
 scores = {}
@@ -97,6 +99,8 @@ def receive_messages():
 						transmitter.send(id)
 		except ValueError as error:
 			app.logger.warning('Ignored invalid UDP message: %s', error)
+		except KeyError as error:
+			app.logger.warning('Invalid ID supplied: %s', error)
 		except OSError as error:
 			app.logger.error('UDP receiver stopped: %s', error)
 			break
