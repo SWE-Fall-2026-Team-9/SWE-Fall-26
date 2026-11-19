@@ -154,8 +154,6 @@
   </div>
 
   <script>
-    // Game events are produced by the server's UDP receive loop. Scoring rules
-    // are not applied yet, so this event feed only describes what happened.
     const socket = io();
 
     socket.on('game-event', event => {

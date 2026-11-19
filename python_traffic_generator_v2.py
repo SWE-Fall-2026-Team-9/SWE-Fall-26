@@ -64,8 +64,12 @@ while True:
 		message = str(redplayer) + ":43"
 	if counter == 20:
 		message = str(greenplayer) + ":53"
+	if counter == 30:
+			message = str(redplayer) + ":43"
+	if counter == 40:
+		message = str(greenplayer) + ":53"
 		
-	print("transmitting to game: " + message)
+	print(f"transmitting event {counter} to game: " + message)
 	
 	UDPClientSocketTransmit.sendto((message + '\0').encode('utf-8'), clientAddressPort)
 	# receive answer from game softare

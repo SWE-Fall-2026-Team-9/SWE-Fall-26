@@ -68,5 +68,5 @@ python tests/test_game_events.py
 ```
 
 This verifies the event-foundation code only (tag/base event construction,
-Socket.IO emission, the scoring extension hook, the UDP receive loop, and the
-game-page event feed). It does not test scoring rules.
+Socket.IO emission, the UDP receive loop, UDP responses, and the game-page event
+feed). It does not test scoring rules.

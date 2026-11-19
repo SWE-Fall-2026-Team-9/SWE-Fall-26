@@ -92,43 +92,34 @@ def describe_equipment(equipment_id):
 		return f'Equipment {equipment_id}'
 	return game_player['codename']
 
-def build_game_event(transmitter_id, hit_id):
-	"""Build the client-facing event for one inbound UDP message.
-
-	The expected point changes are included for display only. Applying them to
-	scores is left to the scoring daemon, which can extend handle_game_event().
-	"""
-	transmitter = find_game_player_by_equipment(transmitter_id)
-	hit = find_game_player_by_equipment(hit_id)
-	timestamp = time.strftime('%H:%M:%S')
-
+def find_base_hit(transmitter_id, hit_id):
+	"""Return the base name, rewarded team, and player equipment ID for a base event."""
 	base_codes = (
 		(RED_BASE_CODE, 'red', 'green'),
 		(GREEN_BASE_CODE, 'green', 'red')
 	)
-	for base_code, base_name, scoring_team in base_codes:
+	for base_code, base_name, rewarded_team in base_codes:
 		if transmitter_id == base_code:
-			scoring_equipment_id = hit_id
-		elif hit_id == base_code:
-			scoring_equipment_id = transmitter_id
-		else:
-			continue
+			return base_name, rewarded_team, hit_id
+		if hit_id == base_code:
+			return base_name, rewarded_team, transmitter_id
+	return None
 
-		scoring_player = find_game_player_by_equipment(scoring_equipment_id)
-		points = None
-		score_changes = []
+def build_game_event(transmitter_id, hit_id):
+	"""Build the client-facing event for one inbound UDP message."""
+	transmitter = find_game_player_by_equipment(transmitter_id)
+	hit = find_game_player_by_equipment(hit_id)
+	timestamp = time.strftime('%H:%M:%S')
+
+	base_hit = find_base_hit(transmitter_id, hit_id)
+	if base_hit is not None:
+		base_name, rewarded_team, player_equipment_id = base_hit
+		player = find_game_player_by_equipment(player_equipment_id)
 		point_text = ''
-		if scoring_player is not None:
-			if scoring_player['team'] == scoring_team:
-				points = 100
+		if player is not None:
+			if player['team'] == rewarded_team:
 				point_text = ' (+100)'
-				score_changes = [{
-					'playerID': scoring_player['playerID'],
-					'codename': scoring_player['codename'],
-					'points': 100
-				}]
 			else:
-				points = 0
 				point_text = ' (no points)'
 
 		return {
@@ -136,40 +127,16 @@ def build_game_event(transmitter_id, hit_id):
 			'base': base_name,
 			'transmitterEquipmentID': transmitter_id,
 			'hitEquipmentID': hit_id,
-			'scoringEquipmentID': scoring_equipment_id,
 			'transmitter': transmitter,
 			'hit': hit,
 			'timestamp': timestamp,
-			'points': points,
-			'scoreChanges': score_changes,
-			'message': f'{describe_equipment(scoring_equipment_id)} hit the {base_name} base{point_text}'
+			'message': f'{describe_equipment(player_equipment_id)} hit the {base_name} base{point_text}'
 		}
 
-	points = None
-	score_changes = []
 	if transmitter is not None and hit is not None:
 		if transmitter['team'] == hit['team']:
-			points = -10
-			score_changes = [
-				{
-					'playerID': transmitter['playerID'],
-					'codename': transmitter['codename'],
-					'points': -10
-				},
-				{
-					'playerID': hit['playerID'],
-					'codename': hit['codename'],
-					'points': -10
-				}
-			]
 			message = f'{transmitter["codename"]} tagged teammate {hit["codename"]} (-10 each)'
 		else:
-			points = 10
-			score_changes = [{
-				'playerID': transmitter['playerID'],
-				'codename': transmitter['codename'],
-				'points': 10
-			}]
 			message = f'{transmitter["codename"]} tagged {hit["codename"]} (+10)'
 	else:
 		message = f'{describe_equipment(transmitter_id)} tagged {describe_equipment(hit_id)}'
@@ -181,18 +148,21 @@ def build_game_event(transmitter_id, hit_id):
 		'transmitter': transmitter,
 		'hit': hit,
 		'timestamp': timestamp,
-		'points': points,
-		'scoreChanges': score_changes,
 		'message': message
 	}
 
-def handle_game_event(event):
-	"""Extension point for the scoring daemon.
+def process_game_event(transmitter_id, hit_id):
+	"""Describe an inbound UDP message and broadcast it to connected clients."""
+	with stateLock:
+		event = build_game_event(transmitter_id, hit_id)
 
-	Scoring rules are intentionally not implemented here yet. The daemon can
-	update scores/game state and extend the event before it is sent to clients.
-	"""
-	return event
+	try:
+		send_event_response(event)
+	except OSError as error:
+		app.logger.warning(f'UDP response failed: {error}')
+
+	socket.emit('game-event', event)
+	app.logger.info(f'Game event [{event["timestamp"]}]: {event["message"]}')
 
 def send_event_response(event):
 	"""Broadcast the required UDP response for an inbound event.
@@ -213,16 +183,6 @@ def send_event_response(event):
 		transmitter.send(event['hitEquipmentID'])
 		if same_team:
 			transmitter.send(event['transmitterEquipmentID'])
-
-def process_game_event(transmitter_id, hit_id):
-	"""Describe an inbound UDP message and broadcast it to connected clients."""
-	with stateLock:
-		event = build_game_event(transmitter_id, hit_id)
-
-	event = handle_game_event(event)
-	send_event_response(event)
-	socket.emit('game-event', event)
-	app.logger.info('Game event [%s]: %s', event['timestamp'], event['message'])
 
 def receive_messages():
 	while True:
