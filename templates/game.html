@@ -155,6 +155,9 @@
 
   <script>
     const socket = io();
+    const formatter = new Intl.NumberFormat('en-US', {
+      minimumIntegerDigits: 2
+    })
 
     socket.on('game-event', event => {
       if (!event || !event.message) {
@@ -163,8 +166,8 @@
 
       const eventBox = document.createElement("div");
       eventBox.className = "event" + (event.type === "base-hit" ? " event-base" : "");
-      const timestamp = event.timestamp || new Date().toLocaleTimeString([], { hour12: false });
-      eventBox.textContent = "[" + timestamp + "] " + event.message;
+      const timestamp = event.timestamp;
+      eventBox.textContent = `[${formatter.format(timestamp[0])}:${formatter.format(timestamp[1])}] ` + event.message;
 
       const events = document.getElementById("events");
       // Newest events go at the top; older events move down the feed.

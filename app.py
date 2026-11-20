@@ -5,6 +5,7 @@ from modules import db, udp
 import ipaddress
 import threading
 import time
+from datetime import datetime
 from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
 from psycopg import OperationalError
 
@@ -32,18 +33,19 @@ MAX_CODENAME_LENGTH = 255
 stateLock = threading.RLock()
 transmitterLock = threading.Lock()
 game_started = False
+gameStartTime = None
 
 @socket.on('game-ready')
 def handle_game_ready():
 	"""Start the traffic generator once the game page can receive events."""
-	global game_started
+	global game_started, gameStartTime
 	with stateLock:
-		if game_started:
-			return
-		game_started = True
+		if not game_started:
+			game_started = True
+			gameStartTime = datetime.now()
 
-	with transmitterLock:
-		transmitter.send(202)
+			with transmitterLock:
+				transmitter.send(202)
 
 def parse_positive_integer(data, field_name):
 	value = data.get(field_name)
@@ -122,7 +124,7 @@ def build_game_event(transmitter_id, hit_id):
 	"""Build the client-facing event for one inbound UDP message."""
 	transmitter = find_game_player_by_equipment(transmitter_id)
 	hit = find_game_player_by_equipment(hit_id)
-	timestamp = time.strftime('%H:%M:%S')
+	timestamp = divmod(int((datetime.now() - gameStartTime).total_seconds()), 60) # Returns a tuple (minutes, seconds) representing elapsed time
 
 	base_hit = find_base_hit(transmitter_id, hit_id)
 	if base_hit is not None:

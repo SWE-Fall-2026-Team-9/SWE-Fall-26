@@ -68,5 +68,6 @@ python tests/test_game_events.py
 ```
 
 This verifies the Socket.IO event plumbing around the UDP receive loop and its
-scoring rules (tag/base event construction, Socket.IO emission, UDP responses,
-scoring updates, and the game-page event feed).
+scoring rules (game-ready start time, elapsed-time event timestamps, tag/base
+event construction, Socket.IO emission, UDP responses, scoring updates, and the
+game-page event feed).

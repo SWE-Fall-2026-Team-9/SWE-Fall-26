@@ -301,10 +301,21 @@ The game page (`/game`) connects with Socket.IO and listens for `game-event`
 messages. Events are broadcast whenever the UDP receiver processes an inbound
 `<transmitterEquipmentID>:<hitEquipmentID>` message.
 
-After its event handler is wired up, the game page emits `game-ready`. The server
-sends the `202` start signal to the traffic generator on the first `game-ready`
-event, so the generator cannot start before the page can receive events. Loading
-`/game` by itself does not start the generator.
+After its event handler is wired up, the game page emits `game-ready`. On the
+first `game-ready`, the server sets the game start time, marks the game as
+started, and sends the `202` start signal to the traffic generator. Later
+`game-ready` events from additional or reconnecting clients do not reset the
+start time or resend `202`. Loading `/game` by itself does not start the game.
+
+Each event's `timestamp` is the elapsed game time as a two-element array:
+
+```json
+[minutes, seconds]
+```
+
+The client formats each element as a two-digit number when displaying the event
+feed. Until the game starts, `gameStartTime` is `None` and elapsed-time event
+timestamps cannot be built.
 
 ### Tag event
 
@@ -315,7 +326,7 @@ event, so the generator cannot start before the page can receive events. Loading
   "hitEquipmentID": 34,
   "transmitter": {"playerID": 1, "codename": "Alpha", "team": "red"},
   "hit": {"playerID": 2, "codename": "Bravo", "team": "green"},
-  "timestamp": "14:32:07",
+  "timestamp": [12, 7],
   "message": "Alpha tagged Bravo (+10)"
 }
 ```
@@ -338,7 +349,7 @@ score state are owned by the UDP receive loop. A same-team tag shows
   "hitEquipmentID": 53,
   "transmitter": {"playerID": 2, "codename": "Bravo", "team": "green"},
   "hit": null,
-  "timestamp": "14:32:19",
+  "timestamp": [12, 19],
   "message": "Bravo hit the red base (+100)"
 }
 ```

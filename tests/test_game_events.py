@@ -18,6 +18,7 @@ Run from the project root:
 import os
 import sys
 import unittest
+from datetime import datetime
 
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,6 +85,7 @@ class EventTestBase(unittest.TestCase):
         app.playerEquipment.clear()
         app.scores.clear()
         app.game_started = False
+        app.gameStartTime = datetime.now()
 
         app.gamePlayers[1] = {
             "playerID": 1,
@@ -126,12 +128,17 @@ class GameStartTests(EventTestBase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"socket.emit('game-ready')", response.data)
         self.assertEqual(self.fake_transmitter.sent, [])
+        self.assertFalse(app.game_started)
 
     def test_game_ready_starts_generator_once(self):
         self.client.emit('game-ready')
+        first_start_time = app.gameStartTime
         self.client.emit('game-ready')
 
         self.assertEqual(self.fake_transmitter.sent, [202])
+        self.assertTrue(app.game_started)
+        self.assertIsNotNone(first_start_time)
+        self.assertIs(app.gameStartTime, first_start_time)
 
 
 class BuildGameEventTests(EventTestBase):
@@ -142,7 +149,9 @@ class BuildGameEventTests(EventTestBase):
         self.assertEqual(event["transmitterEquipmentID"], 12)
         self.assertEqual(event["hitEquipmentID"], 34)
         self.assertEqual(event["message"], "Alpha tagged Bravo (+10)")
-        self.assertRegex(event["timestamp"], r"^\d{2}:\d{2}:\d{2}$")
+        self.assertIsInstance(event["timestamp"], tuple)
+        self.assertEqual(len(event["timestamp"]), 2)
+        self.assertTrue(all(isinstance(value, int) for value in event["timestamp"]))
         self.assertEqual(
             event["transmitter"],
             {"playerID": 1, "codename": "Alpha", "team": "red"},
@@ -463,7 +472,10 @@ class ClientTemplateTests(unittest.TestCase):
         self.assertIn("events.insertBefore(eventBox, events.firstChild)", html)
         self.assertIn("events.scrollTop = 0", html)
         self.assertIn("event.timestamp", html)
-        self.assertIn('"[" + timestamp + "] " + event.message', html)
+        self.assertIn("timestamp[0]", html)
+        self.assertIn("timestamp[1]", html)
+        self.assertIn("formatter.format(timestamp[0])", html)
+        self.assertIn("formatter.format(timestamp[1])", html)
         self.assertIn("socket.emit('game-ready')", html)
         self.assertNotIn("socket.on('player-hit'", html)
 
