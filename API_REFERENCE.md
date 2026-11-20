@@ -18,7 +18,7 @@ Use relative URLs when the frontend is served by the Flask application.
 - Codenames are trimmed, cannot be blank, and must contain no more than 255 characters.
 - Database players are persistent PostgreSQL records containing an ID and codename.
 - Game players are temporary roster entries containing a database player, equipment assignment, team, score, and base-hit status.
-- `hasHitBase` is a boolean on every game player object. It starts as `false` when the player is added and becomes `true` when the server processes a valid opposing-base hit. The game page displays the base icon beside the codename when it is `true`.
+- `hasHitBase` is a boolean on every game player object. It starts as `false` when the player is added and is updated by the UDP receive loop when it processes a valid opposing-base hit. The game event pipeline does not modify it. The game page displays the base icon beside the codename when it is `true`.
 - Creating a database player preserves the player ID entered by the administrator.
 
 ## Endpoint summary
@@ -294,6 +294,79 @@ await fetch('/api/game/players/add', {
   })
 });
 ```
+
+## Socket.IO game events
+
+The game page (`/game`) connects with Socket.IO and listens for `game-event`
+messages. Events are broadcast whenever the UDP receiver processes an inbound
+`<transmitterEquipmentID>:<hitEquipmentID>` message.
+
+After its event handler is wired up, the game page emits `game-ready`. On the
+first `game-ready`, the server sets the game start time, marks the game as
+started, and sends the `202` start signal to the traffic generator. Later
+`game-ready` events from additional or reconnecting clients do not reset the
+start time or resend `202`. Loading `/game` by itself does not start the game.
+
+Each event's `timestamp` is the elapsed game time as a two-element array:
+
+```json
+[minutes, seconds]
+```
+
+The client formats each element as a two-digit number when displaying the event
+feed. Until the game starts, `gameStartTime` is `None` and elapsed-time event
+timestamps cannot be built.
+
+### Tag event
+
+```json
+{
+  "type": "tag",
+  "transmitterEquipmentID": 12,
+  "hitEquipmentID": 34,
+  "transmitter": {"playerID": 1, "codename": "Alpha", "team": "red"},
+  "hit": {"playerID": 2, "codename": "Bravo", "team": "green"},
+  "timestamp": [12, 7],
+  "message": "Alpha tagged Bravo (+10)"
+}
+```
+
+`transmitter` or `hit` is `null` when the equipment ID is not assigned to a
+current-game player, and the message falls back to `Equipment <id>`.
+
+The `message` text includes the expected point change for the play-by-play feed
+only. Events carry no scoring fields and do not change scores; scoring rules and
+score state are owned by the UDP receive loop. A same-team tag shows
+`Alpha tagged teammate Charlie (-10 each)`.
+
+### Base event
+
+```json
+{
+  "type": "base-hit",
+  "base": "red",
+  "transmitterEquipmentID": 34,
+  "hitEquipmentID": 53,
+  "transmitter": {"playerID": 2, "codename": "Bravo", "team": "green"},
+  "hit": null,
+  "timestamp": [12, 19],
+  "message": "Bravo hit the red base (+100)"
+}
+```
+
+The base code (`53` for red, `43` for green) may appear as either equipment ID.
+The message shows `(+100)` for a valid opposing-base hit and `(no points)`
+otherwise. These point changes are display text only. The UDP receive loop owns
+`hasHitBase`; the event pipeline reads that flag and does not emit another base
+event after the player has already hit the base.
+
+The event pipeline is descriptive only. It does not apply or expose scoring
+rules; the UDP receive loop applies the scoring rules.
+
+For every inbound event, the server broadcasts the hit equipment ID back to the
+UDP destination on port `7500`. A same-team tag also broadcasts the tagging
+equipment ID, producing two outbound transmissions. This includes base events and
+repeated base events whose play-by-play entry is suppressed.
 
 ## Page routes
 

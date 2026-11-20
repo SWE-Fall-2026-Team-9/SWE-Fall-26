@@ -112,7 +112,18 @@
     .hidden {
       visibility: hidden;
     }
+
+    .event {
+      margin: 2px 0;
+      padding: 2px 4px;
+    }
+
+    .event-base {
+      color: #e8e27a;
+    }
   </style>
+
+  <script src="{{ url_for('static', filename='socket.io.min.js') }}"></script>
 </head>
 
 <body>
@@ -143,6 +154,27 @@
   </div>
 
   <script>
+    const socket = io();
+    const formatter = new Intl.NumberFormat('en-US', {
+      minimumIntegerDigits: 2
+    })
+
+    socket.on('game-event', event => {
+      if (!event || !event.message) {
+        return;
+      }
+
+      const eventBox = document.createElement("div");
+      eventBox.className = "event" + (event.type === "base-hit" ? " event-base" : "");
+      const timestamp = event.timestamp;
+      eventBox.textContent = `[${formatter.format(timestamp[0])}:${formatter.format(timestamp[1])}] ` + event.message;
+
+      const events = document.getElementById("events");
+      // Newest events go at the top; older events move down the feed.
+      events.insertBefore(eventBox, events.firstChild);
+      events.scrollTop = 0;
+    });
+
     // Make one row for a player: codename on the left, score on the right
     function makePlayerRow(player) {
       const row = document.createElement("div");
@@ -209,6 +241,11 @@
 
     showPlayers();
     setInterval(showPlayers, 1000);
+
+    // Tell the server we are ready after the event feed is wired up. This
+    // prevents the traffic generator from starting before we can receive
+    // game-event messages.
+    socket.emit('game-ready');
   </script>
 </body>
 

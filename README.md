@@ -58,3 +58,16 @@ Port: 5432
 The database is initialized using the files in init-db/.
 
 Database data is stored in a Docker volume and will persist between restarts.
+
+## Tests
+
+Run the Socket.IO game-event testbench:
+
+```bash
+python tests/test_game_events.py
+```
+
+This verifies the Socket.IO event plumbing around the UDP receive loop and its
+scoring rules (game-ready start time, elapsed-time event timestamps, tag/base
+event construction, Socket.IO emission, UDP responses, scoring updates, and the
+game-page event feed).
