@@ -71,3 +71,13 @@ This verifies the Socket.IO event plumbing around the UDP receive loop and its
 scoring rules (game-ready start time, elapsed-time event timestamps, tag/base
 event construction, Socket.IO emission, UDP responses, scoring updates, and the
 game-page event feed).
+
+## Game music and start countdown
+
+Press F5 on the player-entry page to start the existing 30-second image
+countdown. A random track from `static/photon_tracks/` starts when that
+countdown reaches 15 seconds remaining and continues into the game.
+
+The tracks were sourced from
+[jstrother123/photon-main](https://github.com/jstrother123/photon-main/tree/main/photon_tracks)
+and are included with permission.

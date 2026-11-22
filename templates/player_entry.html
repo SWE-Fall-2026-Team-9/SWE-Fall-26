@@ -80,6 +80,10 @@
       max-height: 85vh;
       object-fit: contain;
     }
+
+    #game-audio {
+      display: none;
+    }
   </style>
 </head>
 
@@ -94,6 +98,7 @@
     <img class="countdown-image" id="countdown-image"
       src="{{ url_for('static', filename='countdown_images/countdown30.png') }}" alt="">
   </div>
+  <audio id="game-audio" preload="auto"></audio>
 
   <h1>Edit Current Game</h1>
 
@@ -407,13 +412,27 @@
     }
 
     const countdownDuration = 30;
-    const countdownDurationMs = countdownDuration * 1000;
+    const countdownDurationMs = countdownDuration * 1600;
     const countdownScreen = document.getElementById("countdown-screen");
     const countdownImage = document.getElementById("countdown-image");
     const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
+    const gameAudio = document.getElementById("game-audio");
+    const gameTracks = [
+      "{{ url_for('static', filename='photon_tracks/Track01.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track02.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track03.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track04.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track05.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track06.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track07.mp3') }}",
+      "{{ url_for('static', filename='photon_tracks/Track08.mp3') }}"
+    ];
     let displayedImage = null;
     let countdownInterval;
     let countdownEnd;
+    let musicStarted = false;
+    let selectedTrack;
+    let audioPrimed = false;
 
     function updateCountdown() {
       const remainingMs = Math.max(0, countdownEnd - Date.now());
@@ -430,6 +449,22 @@
         }
       }
 
+      if (remainingMs <= 18000 && !musicStarted) {
+        musicStarted = true;
+        const startedAt = Date.now();
+        gameAudio.currentTime = 0;
+        gameAudio.muted = false;
+        sessionStorage.setItem("photonGameTrack", JSON.stringify({
+          track: selectedTrack,
+          startedAt
+        }));
+        if (!audioPrimed) {
+          gameAudio.play().catch(() => {
+            showMessage("Unable to play the selected game track.");
+          });
+        }
+      }
+
       if (remainingMs === 0) {
         clearInterval(countdownInterval);
         window.location.href = "/game";
@@ -440,15 +475,33 @@
       const response = await fetch("/api/game/players");
       const result = await response.json();
 
+      if (!result.success || !Array.isArray(result.data)) {
+        showMessage("Unable to load current game players.");
+        return;
+      }
+
       if (result.data.length === 0) {
         showMessage("Add at least one player with an equipment ID.");
         return;
       }
 
+      musicStarted = false;
+      selectedTrack = gameTracks[Math.floor(Math.random() * gameTracks.length)];
+      gameAudio.src = selectedTrack;
+      gameAudio.muted = true;
+      audioPrimed = false;
+      sessionStorage.removeItem("photonGameTrack");
+      gameAudio.play().then(() => {
+        audioPrimed = true;
+      }).catch(() => {
+        audioPrimed = false;
+      });
+
       countdownEnd = Date.now() + countdownDurationMs;
-      document.getElementById("countdown-screen").hidden = false;
+      countdownScreen.hidden = false;
       updateCountdown();
       countdownInterval = setInterval(updateCountdown, 100);
+      document.getElementById("message").textContent = "";
     }
 
     document.addEventListener("keydown", function (event) {

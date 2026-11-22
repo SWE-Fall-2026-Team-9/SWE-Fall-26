@@ -4,6 +4,10 @@
 <head>
   <title>Play Action</title>
   <style>
+    #game-audio {
+      display: none;
+    }
+
     body {
       background-color: black;
       color: white;
@@ -153,11 +157,37 @@
     <br>
   </div>
 
+  <audio id="game-audio" preload="auto"></audio>
+
   <script>
     const socket = io();
     const formatter = new Intl.NumberFormat('en-US', {
       minimumIntegerDigits: 2
     })
+
+    const gameAudio = document.getElementById("game-audio");
+    const trackPlayback = sessionStorage.getItem("photonGameTrack");
+    if (trackPlayback) {
+      sessionStorage.removeItem("photonGameTrack");
+      try {
+        const playback = JSON.parse(trackPlayback);
+        const validTrack = /^\/static\/photon_tracks\/Track0[1-8]\.mp3$/.test(playback.track);
+        const elapsedSeconds = (Date.now() - playback.startedAt) / 1000;
+        if (validTrack && Number.isFinite(elapsedSeconds) && elapsedSeconds >= 0) {
+          gameAudio.src = playback.track;
+          gameAudio.addEventListener("loadedmetadata", function () {
+            if (elapsedSeconds < gameAudio.duration) {
+              gameAudio.currentTime = elapsedSeconds;
+              gameAudio.play().catch(error => {
+                console.error("Unable to continue the game track:", error);
+              });
+            }
+          }, { once: true });
+        }
+      } catch (error) {
+        console.error("Unable to restore the game track:", error);
+      }
+    }
 
     socket.on('game-event', event => {
       if (!event || !event.message) {
