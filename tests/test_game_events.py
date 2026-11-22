@@ -463,6 +463,34 @@ class ScoringLoopTests(EventTestBase):
 
 
 class ClientTemplateTests(unittest.TestCase):
+    def test_player_entry_syncs_game_start_to_random_track(self):
+        template_path = os.path.join(PROJECT_ROOT, "templates", "player_entry.html")
+        with open(template_path) as template:
+            html = template.read()
+
+        for track_number in range(1, 9):
+            track_name = f"Track{track_number:02}.mp3"
+            self.assertTrue(
+                os.path.isfile(
+                    os.path.join(PROJECT_ROOT, "static", "photon_tracks", track_name)
+                )
+            )
+
+        self.assertIn("const gameTracksUrl =", html)
+        self.assertIn("filename='photon_tracks/'", html)
+        self.assertIn("Math.floor(Math.random() * 8) + 1", html)
+        self.assertIn('gameTracksUrl + "Track0" + trackNumber + ".mp3"', html)
+        self.assertIn("const countdownDuration = 30;", html)
+        self.assertIn('countdown30.png', html)
+        self.assertIn("countdownImage.src = countdownAssetUrl + imageName;", html)
+        self.assertIn("if (remainingMs <= 18000 && !musicStarted)", html)
+        self.assertIn('window.location.href = "/game";', html)
+
+        with open(os.path.join(PROJECT_ROOT, "templates", "game.html")) as template:
+            game_html = template.read()
+        self.assertIn('sessionStorage.getItem("photonGameTrack")', game_html)
+        self.assertIn("gameAudio.currentTime = elapsedSeconds;", game_html)
+
     def test_game_page_wires_game_event_to_feed(self):
         with open(os.path.join(PROJECT_ROOT, "templates", "game.html")) as template:
             html = template.read()
@@ -489,4 +517,3 @@ class ClientTemplateTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
-

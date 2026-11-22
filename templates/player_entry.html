@@ -80,6 +80,10 @@
       max-height: 85vh;
       object-fit: contain;
     }
+
+    #game-audio {
+      display: none;
+    }
   </style>
 </head>
 
@@ -94,6 +98,7 @@
     <img class="countdown-image" id="countdown-image"
       src="{{ url_for('static', filename='countdown_images/countdown30.png') }}" alt="">
   </div>
+  <audio id="game-audio" preload="auto"></audio>
 
   <h1>Edit Current Game</h1>
 
@@ -407,13 +412,18 @@
     }
 
     const countdownDuration = 30;
-    const countdownDurationMs = countdownDuration * 1000;
+    const countdownDurationMs = countdownDuration * 1600;
     const countdownScreen = document.getElementById("countdown-screen");
     const countdownImage = document.getElementById("countdown-image");
     const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
+    const gameAudio = document.getElementById("game-audio");
+    const gameTracksUrl = "{{ url_for('static', filename='photon_tracks/') }}";
     let displayedImage = null;
     let countdownInterval;
     let countdownEnd;
+    let musicStarted = false;
+    let selectedTrack;
+    let audioPrimed = false;
 
     function updateCountdown() {
       const remainingMs = Math.max(0, countdownEnd - Date.now());
@@ -427,6 +437,22 @@
         if (displayedImage !== imageName) {
           countdownImage.src = countdownAssetUrl + imageName;
           displayedImage = imageName;
+        }
+      }
+
+      if (remainingMs <= 18000 && !musicStarted) {
+        musicStarted = true;
+        const startedAt = Date.now();
+        gameAudio.currentTime = 0;
+        gameAudio.muted = false;
+        sessionStorage.setItem("photonGameTrack", JSON.stringify({
+          track: selectedTrack,
+          startedAt
+        }));
+        if (!audioPrimed) {
+          gameAudio.play().catch(() => {
+            showMessage("Unable to play the selected game track.");
+          });
         }
       }
 
@@ -445,10 +471,24 @@
         return;
       }
 
+      musicStarted = false;
+      const trackNumber = Math.floor(Math.random() * 8) + 1;
+      selectedTrack = gameTracksUrl + "Track0" + trackNumber + ".mp3";
+      gameAudio.src = selectedTrack;
+      gameAudio.muted = true;
+      audioPrimed = false;
+      sessionStorage.removeItem("photonGameTrack");
+      gameAudio.play().then(() => {
+        audioPrimed = true;
+      }).catch(() => {
+        audioPrimed = false;
+      });
+
       countdownEnd = Date.now() + countdownDurationMs;
-      document.getElementById("countdown-screen").hidden = false;
+      countdownScreen.hidden = false;
       updateCountdown();
       countdownInterval = setInterval(updateCountdown, 100);
+      document.getElementById("message").textContent = "";
     }
 
     document.addEventListener("keydown", function (event) {
