@@ -23,6 +23,21 @@ receiver = udp.Receiver(app.logger)
 playerDB = db.PlayerDatabase()
 socket = SocketIO(app)
 
+class _SocketIOWebsocketCloseFilter(logging.Filter):
+	def filter(self, record):
+		message = record.getMessage()
+		if message.startswith('Error on request:'):
+			# Only the intentional close raises from engineio's websocket wrapper.
+			return not (
+				'_websocket_wsgi.py' in message
+				and message.rstrip().endswith('ConnectionError')
+			)
+		if '/socket.io/' in message and 'transport=websocket' in message:
+			return not message.rstrip().endswith(' 500 -')
+		return True
+
+logging.getLogger('werkzeug').addFilter(_SocketIOWebsocketCloseFilter())
+
 scores = {}
 gamePlayers = {} # Player ID: current-game data
 playerEquipment = {} # Equipment ID: Player ID
