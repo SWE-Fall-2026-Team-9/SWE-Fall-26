@@ -417,16 +417,7 @@
     const countdownImage = document.getElementById("countdown-image");
     const countdownAssetUrl = "{{ url_for('static', filename='countdown_images/') }}";
     const gameAudio = document.getElementById("game-audio");
-    const gameTracks = [
-      "{{ url_for('static', filename='photon_tracks/Track01.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track02.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track03.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track04.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track05.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track06.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track07.mp3') }}",
-      "{{ url_for('static', filename='photon_tracks/Track08.mp3') }}"
-    ];
+    const gameTracksUrl = "{{ url_for('static', filename='photon_tracks/') }}";
     let displayedImage = null;
     let countdownInterval;
     let countdownEnd;
@@ -475,18 +466,14 @@
       const response = await fetch("/api/game/players");
       const result = await response.json();
 
-      if (!result.success || !Array.isArray(result.data)) {
-        showMessage("Unable to load current game players.");
-        return;
-      }
-
       if (result.data.length === 0) {
         showMessage("Add at least one player with an equipment ID.");
         return;
       }
 
       musicStarted = false;
-      selectedTrack = gameTracks[Math.floor(Math.random() * gameTracks.length)];
+      const trackNumber = Math.floor(Math.random() * 8) + 1;
+      selectedTrack = gameTracksUrl + "Track0" + trackNumber + ".mp3";
       gameAudio.src = selectedTrack;
       gameAudio.muted = true;
       audioPrimed = false;

@@ -470,18 +470,20 @@ class ClientTemplateTests(unittest.TestCase):
 
         for track_number in range(1, 9):
             track_name = f"Track{track_number:02}.mp3"
-            self.assertIn(f"photon_tracks/{track_name}", html)
             self.assertTrue(
                 os.path.isfile(
                     os.path.join(PROJECT_ROOT, "static", "photon_tracks", track_name)
                 )
             )
 
-        self.assertIn("Math.floor(Math.random() * gameTracks.length)", html)
+        self.assertIn("const gameTracksUrl =", html)
+        self.assertIn("filename='photon_tracks/'", html)
+        self.assertIn("Math.floor(Math.random() * 8) + 1", html)
+        self.assertIn('gameTracksUrl + "Track0" + trackNumber + ".mp3"', html)
         self.assertIn("const countdownDuration = 30;", html)
         self.assertIn('countdown30.png', html)
         self.assertIn("countdownImage.src = countdownAssetUrl + imageName;", html)
-        self.assertIn("if (remainingMs <= 15000 && !musicStarted)", html)
+        self.assertIn("if (remainingMs <= 18000 && !musicStarted)", html)
         self.assertIn('window.location.href = "/game";', html)
 
         with open(os.path.join(PROJECT_ROOT, "templates", "game.html")) as template:
