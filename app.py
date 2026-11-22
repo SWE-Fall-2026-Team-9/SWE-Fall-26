@@ -1,3 +1,5 @@
+import time
+
 from flask import Flask, render_template, request
 import logging
 from flask_socketio import SocketIO
@@ -32,6 +34,12 @@ MAX_INTEGER_ID = 2_147_483_647
 MAX_CODENAME_LENGTH = 255
 stateLock = threading.RLock()
 transmitterLock = threading.Lock()
+GAME_DURATION_SECONDS = 6 * 60
+END_CODE_REPEATS = 3
+END_CODE_DELAY_SECONDS = 1.5
+gameEndTime = None 
+gameOver = False
+
 game_started = False
 gameStartTime = None
 
@@ -256,7 +264,42 @@ def home():
 
 @app.route('/game')
 def game():
+	global gameEndTime, gameOver, game_started, gameStartTime
+	with stateLock:
+		if gameEndTime is None or gameOver:
+			gameEndTime = time.monotonic() + GAME_DURATION_SECONDS
+			gameOver = False
+			game_started = False
+			gameStartTime = datetime.now()
+			scores.clear()
+			for player_id, game_player in gamePlayers.items():
+				scores[player_id] = 0
+				game_player['hasHitBase'] = False
+		seconds_left = max(0, int(round(gameEndTime - time.monotonic())))
+
+	transmitter.send(202)
 	return render_template('game.html')
+
+@app.route('/api/game/end', methods=['POST'])
+def end_game():
+	global gameOver
+	with stateLock:
+		if gameOver:
+			return {'success': True, 'message': 'Game already ended.'}
+		gameOver = True
+
+	threading.Thread(target=send_end_codes, name='end-game-sender', daemon=True).start()
+
+	app.logger.info('Game ended')
+	return {'success': True, 'message': 'Game ended.'}
+
+def send_end_codes():
+	for i in range(END_CODE_REPEATS):
+		if i > 0:
+			time.sleep(END_CODE_DELAY_SECONDS)
+		with transmitterLock:
+			transmitter.send(221)
+
 
 @app.route('/api/database/status', methods=['GET'])
 def get_database_status():
